@@ -1,0 +1,136 @@
+{ pkgs, ... }: {
+  programs.vscode = {
+    enable = true;
+    package = pkgs.vscodium;
+    mutableExtensionsDir = false;
+
+    profiles.default = {
+      enableUpdateCheck = false;
+      enableExtensionUpdateCheck = false;
+
+      extensions = with pkgs.vscode-extensions; [
+        enkia.tokyo-night
+        jnoortheen.nix-ide
+        pkief.material-icon-theme
+      ];
+
+      # extensions = with pkgs.open-vsx;
+      #   [
+      #     # https://raw.githubusercontent.com/nix-community/nix-vscode-extensions/master/data/cache/open-vsx-latest.json
+      #     enkia.tokyo-night
+      #     jnoortheen.nix-ide
+      #     pkief.material-icon-theme
+      #   ]
+      #   ++ (with pkgs.vscode-marketplace; [
+      #     # https://raw.githubusercontent.com/nix-community/nix-vscode-extensions/master/data/cache/vscode-marketplace-latest.json
+      #   ]);
+
+      userSettings = {
+        # Telemetry
+        "telemetry.feedback.enabled" = false;
+        "telemetry.telemetryLevel" = "off";
+        "crashReporting.enabled" = "off";
+
+        # Annoyances
+        "extensions.ignoreRecommendations" = true;
+        "security.workspace.trust.enabled" = false;
+
+        # Version Control
+        "git.enableSmartCommit" = true;
+        "git.autofetch" = "all";
+        "git.confirmSync" = false;
+        "githubPullRequests.pullBranch" = "always";
+
+        # Smooth Scrolling
+        "editor.smoothScrolling" = true;
+        "workbench.list.smoothScrolling" = true;
+        "terminal.integrated.smoothScrolling" = true;
+
+        # Mouse Wheel Zoom
+        "window.zoomPerWindow" = false;
+        # "editor.mouseWheelZoom" = true;
+
+        # Layout & UI
+        "window.commandCenter" = true;
+        "workbench.activityBar.location" = "top";
+        "editor.minimap.enabled" = false;
+        "editor.lightbulb.enabled" = "off";
+        "workbench.editor.wrapTabs" = true;
+        "workbench.editor.tabActionCloseVisibility" = false;
+        "explorer.compactFolders" = false;
+        "material-icon-theme.hidesExplorerArrows" = true;
+        "workbench.tree.indent" = 16;
+        "scm.defaultViewMode" = "tree";
+        "githubPullRequests.fileListLayout" = "tree";
+        "git.blame.statusBarItem.enabled" = true;
+        "editor.tabSize" = 2;
+        "editor.rulers" = [ 80 ];
+
+        # Font
+        "editor.fontSize" = 14;
+        "terminal.integrated.fontSize" = 13;
+
+        # Highlighting
+        "editor.guides.bracketPairs" = true;
+
+        # Theme
+        "workbench.colorTheme" = "Tokyo Night";
+        "workbench.iconTheme" = "material-icon-theme";
+        "workbench.colorCustomizations" = {
+          "editorRuler.foreground" = "#ffffff06";
+        };
+
+        # Explorer
+        "explorer.confirmDragAndDrop" = false;
+        "explorer.confirmDelete" = false;
+        "javascript.updateImportsOnFileMove.enabled" = "always";
+        "typescript.updateImportsOnFileMove.enabled" = "always";
+
+        # Terminal
+        "terminal.integrated.defaultProfile.windows" = "C:\\Program Files\\Git\\bin\\bash.exe (migrated)";
+        "terminal.integrated.profiles.windows" = {
+          "C:\\Program Files\\Git\\bin\\bash.exe (migrated)" = {
+            path = "C:\\Program Files\\Git\\bin\\bash.exe";
+            args = [];
+          };
+        };
+
+        # Formatting
+        "editor.formatOnSave" = true;
+        "editor.defaultFormatter" = "esbenp.prettier-vscode";
+        "prettier.semi" = false;
+        "prettier.singleQuote" = true;
+        "prettier.trailingComma" = "all";
+
+        "[prisma]" = {
+          "editor.defaultFormatter" = "Prisma.prisma";
+        };
+
+        "[nix]" = {
+          "editor.defaultFormatter" = "jnoortheen.nix-ide";
+        };
+
+        # Suggestions
+        "editor.suggest.insertMode" = "replace";
+        "editor.quickSuggestions" = {
+          strings = true;
+        };
+
+        # Linting
+        "css.lint.emptyRules" = "ignore";
+
+        # Cursor
+        "cursor.cpp.disabledLanguages" = [];
+        "cursor.chat.terminalShowHoverHint" = false;
+
+        # Extensions
+        "liveServer.settings.donotVerifyTags" = true;
+        "liveServer.settings.donotShowInfoMsg" = true;
+
+        "nix.enableLanguageServer" = true;
+        "nix.formatterPath" = "${pkgs.alejandra}/bin/alejandra";
+        "nix.serverPath" = "${pkgs.nixd}/bin/nixd";
+      };
+    };
+  };
+}
