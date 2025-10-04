@@ -3,6 +3,10 @@
   pkgs,
   ...
 }: {
+  imports = [
+    ./ssh.nix
+  ];
+
   nixpkgs.config.allowUnfree = true;
 
   # List packages installed in system profile. To search by name, run:

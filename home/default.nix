@@ -1,4 +1,4 @@
-{...}: {
+{
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
@@ -8,6 +8,7 @@
       home.homeDirectory = "/Users/avisek";
 
       imports = [
+        ./ssh.nix
         ./git.nix
         ./vscode
       ];
