@@ -1,4 +1,6 @@
 {
+  programs.gh.enable = true;
+
   programs.git = {
     enable = true;
 
@@ -8,8 +10,8 @@
     extraConfig = {
       init.defaultBranch = "main";
       push.autoSetupRemote = true;
-
-      url."git@github.com:".insteadOf = "https://github.com/";
     };
   };
+
+  # echo "n" | gh auth login --git-protocol https --web --skip-ssh-key --clipboard
 }

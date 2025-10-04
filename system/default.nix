@@ -4,7 +4,7 @@
   ...
 }: {
   imports = [
-    ./ssh.nix
+    # ./ssh.nix
   ];
 
   nixpkgs.config.allowUnfree = true;

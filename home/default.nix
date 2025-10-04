@@ -8,7 +8,7 @@
       home.homeDirectory = "/Users/avisek";
 
       imports = [
-        ./ssh.nix
+        # ./ssh.nix
         ./git.nix
         ./vscode
       ];
