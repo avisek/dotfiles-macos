@@ -33,7 +33,7 @@
     # mark-wiemer.vscode-autohotkey-plus-plus
 
     # Language Support
-    somewhatstationery.some-sass
+    # somewhatstationery.some-sass
     esbenp.prettier-vscode
     jnoortheen.nix-ide
     tamasfe.even-better-toml
