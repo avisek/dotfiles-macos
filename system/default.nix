@@ -5,6 +5,7 @@
 }: {
   imports = [
     # ./ssh.nix
+    ./podman.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
