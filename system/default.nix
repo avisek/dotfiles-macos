@@ -19,6 +19,9 @@
     nixd
     nil
     alejandra
+
+    nodejs
+    pnpm
   ];
 
   # Necessary for using flakes on this system.
