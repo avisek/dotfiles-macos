@@ -25,6 +25,8 @@
 
     nodejs
     pnpm
+
+    slack
   ];
 
   environment.variables = {
