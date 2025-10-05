@@ -15,6 +15,8 @@
   environment.systemPackages = with pkgs; [
     git
     vim
+    tree
+
     google-chrome
 
     nixd
