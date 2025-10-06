@@ -11,6 +11,7 @@
         # ./ssh.nix
         ./git.nix
         ./vscode
+        ./work.nix
       ];
 
       home.stateVersion = "25.05";

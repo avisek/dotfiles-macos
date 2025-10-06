@@ -6,6 +6,7 @@
   imports = [
     # ./ssh.nix
     ./podman.nix
+    ./work.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
@@ -25,8 +26,6 @@
 
     nodejs
     pnpm
-
-    slack
   ];
 
   environment.variables = {
