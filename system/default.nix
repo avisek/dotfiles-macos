@@ -53,4 +53,6 @@
     name = "avisek";
     home = "/Users/avisek";
   };
+
+  system.primaryUser = "avisek";
 }
