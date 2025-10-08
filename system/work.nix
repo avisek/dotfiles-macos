@@ -3,9 +3,19 @@
     slack
   ];
 
-  system.defaults.CustomUserPreferences = {
-    "com.tinyspeck.slackmacgap" = {
-      AutoUpdate = false;
-    };
-  };
+  # Clear Slack data
+  # rm -rf /Users/avisek/Library/Application\ Support/Slack
+  # rm -rf /Users/avisek/Library/Preferences/com.tinyspeck.slackmacgap.plist
+  # rm -rf /Users/avisek/Library/HTTPStorages/com.tinyspeck.slackmacgap
+  # rm -rf /Users/avisek/Library/HTTPStorages/com.tinyspeck.slackmacgap.binarycookies
+  # rm -rf /Users/avisek/Library/Caches/com.tinyspeck.slackmacgap.ShipIt
+  # rm -rf /Users/avisek/Library/Caches/com.tinyspeck.slackmacgap
+
+  # Block Slack auto-update
+  # TODO: Migrate to networking.hosts once nix-darwin supports it (like NixOS)
+  system.activationScripts.extraActivation.text = ''
+    if ! grep -q "downloads.slack-edge.com" /etc/hosts; then
+      echo "127.0.0.1 downloads.slack-edge.com" >> /etc/hosts
+    fi
+  '';
 }
