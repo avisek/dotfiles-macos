@@ -16,9 +16,7 @@
   # };
 
   environment.interactiveShellInit = lib.mkIf pkgs.stdenv.isDarwin ''
-    if [ -n "$TMPDIR" ] && [ -S "$TMPDIR/podman/podman-machine-default-api.sock" ]; then
-      export DOCKER_HOST="unix://$TMPDIR/podman/podman-machine-default-api.sock"
-    fi
+    export DOCKER_HOST="unix://$TMPDIR/podman/podman-machine-default-api.sock"
   '';
 
   # Podman setup on macOS:
