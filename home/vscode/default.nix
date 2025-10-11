@@ -55,9 +55,55 @@
   standardEditors = builtins.filter (e: !isCursor e) editors;
   cursorEditor = lib.findFirst isCursor null editors;
 
+  # Patches TypeScript language server to increase type truncation limits by 100x,
+  # preventing types from being shortened with "... N more" in editor tooltips.
+  patchTypeScriptTruncation = let
+    tsRelativePath = "extensions/node_modules/typescript/lib/typescript.js";
+    tsPath =
+      if pkgs.stdenv.isDarwin
+      then "Applications/*.app/Contents/Resources/app/${tsRelativePath}"
+      else "lib/vscode/resources/app/${tsRelativePath}";
+  in
+    pkg:
+      pkg.overrideAttrs (oldAttrs: {
+        postInstall =
+          (oldAttrs.postInstall or "")
+          + ''
+            # Locate and patch typescript.js
+            typescriptJs=""
+            for candidate in "$out"/${tsPath}; do
+              if [ -f "$candidate" ]; then
+                typescriptJs="$candidate"
+                break
+              fi
+            done
+
+            if [ -z "$typescriptJs" ]; then
+              echo "ERROR: Could not locate typescript.js in package output"
+              echo "Expected: \$out/${tsPath}"
+              exit 1
+            fi
+
+            echo "Patching TypeScript truncation limits in $typescriptJs"
+            substituteInPlace "$typescriptJs" \
+              --replace-fail "var defaultMaximumTruncationLength = 160;" "var defaultMaximumTruncationLength = 16000;" \
+              --replace-fail "var defaultHoverMaximumTruncationLength = 500;" "var defaultHoverMaximumTruncationLength = 50000;"
+          ''
+          + lib.optionalString pkgs.stdenv.isDarwin ''
+
+            # Re-sign app bundle to fix "damaged app" error on macOS
+            for app in "$out"/Applications/*.app; do
+              if [ -d "$app" ]; then
+                echo "Re-signing $app"
+                /usr/bin/codesign --force --deep --sign - "$app"
+              fi
+            done
+          '';
+      });
+
   mkEditorPackage = editor:
     pkgs.vscode-with-extensions.override {
-      vscode = editor.package;
+      vscode = patchTypeScriptTruncation editor.package;
       vscodeExtensions = extensions;
     };
 
@@ -74,7 +120,7 @@ in {
 
   programs.vscode = lib.mkIf (cursorEditor != null) {
     enable = true;
-    package = cursorEditor.package;
+    package = patchTypeScriptTruncation cursorEditor.package;
     profiles.default.extensions = extensions;
   };
 
