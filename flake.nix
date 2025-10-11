@@ -14,6 +14,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nix-homebrew.url = "github:zhaofengli/nix-homebrew";
+
     mac-app-util.url = "github:hraban/mac-app-util";
 
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
@@ -24,6 +26,7 @@
     nixpkgs,
     nix-darwin,
     home-manager,
+    nix-homebrew,
     mac-app-util,
     nix-vscode-extensions,
     ...
@@ -33,6 +36,7 @@
         specialArgs = {inherit self;};
         modules = [
           ./system
+          nix-homebrew.darwinModules.default
           mac-app-util.darwinModules.default
           home-manager.darwinModules.home-manager
           {

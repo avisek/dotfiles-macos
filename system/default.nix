@@ -5,6 +5,8 @@
 }: {
   imports = [
     # ./ssh.nix
+    # ./settings.nix
+    ./homebrew.nix
     ./podman.nix
     ./work.nix
   ];
@@ -26,6 +28,11 @@
 
     nodejs
     pnpm
+
+    # mas
+    # iina
+    # the-unarchiver
+    # obsidian
   ];
 
   environment.variables = {
