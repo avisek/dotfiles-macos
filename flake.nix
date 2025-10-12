@@ -32,9 +32,10 @@
     ...
   }: {
     darwinConfigurations = {
-      "Aviseks-MacBook-Pro" = nix-darwin.lib.darwinSystem {
+      "macos" = nix-darwin.lib.darwinSystem {
         specialArgs = {inherit self;};
         modules = [
+          {networking.hostName = "macos";}
           ./system
           nix-homebrew.darwinModules.default
           mac-app-util.darwinModules.default
