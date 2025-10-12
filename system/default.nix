@@ -5,6 +5,7 @@
 }: {
   imports = [
     # ./ssh.nix
+    ./sh.nix
     # ./settings.nix
     ./homebrew.nix
     ./podman.nix
