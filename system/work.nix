@@ -18,4 +18,7 @@
       echo "127.0.0.1 downloads.slack-edge.com" >> /etc/hosts
     fi
   '';
+
+  # Remove host entry
+  # sudo sed -i '' '/downloads.slack-edge.com/d' /etc/hosts
 }
