@@ -7,6 +7,7 @@
     # ./ssh.nix
     ./sh.nix
     # ./settings.nix
+    ./power.nix
     ./homebrew.nix
     ./podman.nix
     ./work.nix
