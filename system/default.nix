@@ -8,6 +8,8 @@
     ./sh.nix
     # ./settings.nix
     ./power.nix
+    ./audio.nix
+    ./screens.nix
     ./nightshift.nix
     ./homebrew.nix
     ./podman.nix
