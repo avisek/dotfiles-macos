@@ -15,5 +15,6 @@
 
   environment.systemPackages = with pkgs; [
     macos-audio-devices
+    switchaudio-osx
   ];
 }
