@@ -34,10 +34,10 @@
     nodejs
     pnpm
 
+    obsidian
     # mas
     # iina
     # the-unarchiver
-    # obsidian
   ];
 
   environment.variables = {
