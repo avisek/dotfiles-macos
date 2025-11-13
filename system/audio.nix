@@ -1,16 +1,23 @@
 # audio.nix
-{pkgs, ...}: {
+{pkgs, ...}: let
+  macos-audio-devices = pkgs.stdenv.mkDerivation rec {
+    pname = "macos-audio-devices";
+    version = "1.4.0";
+
+    src = pkgs.fetchurl {
+      url = "https://registry.npmjs.org/${pname}/-/${pname}-${version}.tgz";
+      hash = "sha256-U46Oga8c5XgjjdeDSFcr6vVr35e3DCj+qhJQer8yHuQ=";
+    };
+
+    installPhase = ''
+      mkdir -p $out/bin
+      cp audio-devices $out/bin/
+      chmod +x $out/bin/audio-devices
+    '';
+  };
+in {
   homebrew.casks = [
     "blackhole-2ch"
-  ];
-
-  nixpkgs.overlays = [
-    (final: prev: {
-      macos-audio-devices = prev.writeShellScriptBin "macos-audio-devices" ''
-        export PATH="${prev.nodejs}/bin:${prev.pnpm}/bin:$PATH"
-        exec ${prev.pnpm}/bin/pnpx macos-audio-devices "$@"
-      '';
-    })
   ];
 
   environment.systemPackages = with pkgs; [
