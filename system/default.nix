@@ -11,6 +11,7 @@
     ./audio.nix
     ./screens.nix
     ./nightshift.nix
+    ./hotkeys.nix
     ./homebrew.nix
     ./podman.nix
     ./work.nix
