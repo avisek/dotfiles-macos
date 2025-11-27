@@ -34,6 +34,7 @@
 
     nodejs
     pnpm
+    claude-code
 
     obsidian
     # mas
