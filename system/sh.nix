@@ -32,7 +32,7 @@
       if pkgs.stdenv.isDarwin
       then "check"
       else "test";
-    hook = "eval \"$_PRE_NRS\" 2>/dev/null;";
+    hook = "eval \"$_PRE_NR\" 2>/dev/null;";
   in {
     nrs = "${hook} sudo ${rebuild} switch --flake ~/.dotfiles --impure";
     nrt = "${hook} sudo ${rebuild} ${test} --flake ~/.dotfiles --impure";
