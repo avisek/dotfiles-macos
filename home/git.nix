@@ -13,5 +13,5 @@
     };
   };
 
-  # echo "n" | gh auth login --git-protocol https --web --skip-ssh-key --clipboard
+  # echo "n" | gh auth login --git-protocol https --web --skip-ssh-key --clipboard --scopes repo,workflow
 }
