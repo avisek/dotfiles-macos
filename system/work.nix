@@ -19,6 +19,11 @@
     fi
   '';
 
-  # Remove host entry
-  # sudo sed -i '' '/downloads.slack-edge.com/d' /etc/hosts
+  # Unblock Slack domain before nix rebuild so updates can be downloaded
+  # Hook called by nrs alias in sh.nix (pattern: _pre_nrs_*)
+  environment.interactiveShellInit = ''
+    _pre_nrs_slack() {
+      sudo sed -i '' '/downloads.slack-edge.com/d' /etc/hosts
+    }
+  '';
 }

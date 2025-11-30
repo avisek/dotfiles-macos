@@ -33,7 +33,7 @@
       then "check"
       else "test";
   in {
-    nrs = "sudo ${rebuild} switch --flake ~/.dotfiles --impure";
+    nrs = "for f in \${(Mk)functions:#_pre_nrs_*}; do \$f; done; sudo ${rebuild} switch --flake ~/.dotfiles --impure";
     nrt = "sudo ${rebuild} ${test} --flake ~/.dotfiles --impure";
     nrb = "sudo ${rebuild} boot --flake ~/.dotfiles --impure";
     nrbr = "nrb && reboot";
