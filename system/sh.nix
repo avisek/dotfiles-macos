@@ -32,6 +32,8 @@
       if pkgs.stdenv.isDarwin
       then "check"
       else "test";
+    # Rebuild aliases (nrs, nrt, nrb) run _PRE_NR hooks before rebuilding
+    # Modules can append commands to _PRE_NR via environment.interactiveShellInit
     hook = "[ -n \"$_PRE_NR\" ] && sudo sh -c \"$_PRE_NR\";";
   in {
     nrs = "${hook} sudo ${rebuild} switch --flake ~/.dotfiles --impure";
