@@ -27,13 +27,8 @@
     fi
   '';
 
-  # Hook to unblock Slack domain before nix rebuild
-  # Runs before nrs via /etc/nix-hooks/pre-nrs.d/ mechanism in sh.nix
-  environment.etc."nix-hooks/pre-nrs.d/slack" = {
-    mode = "0755";
-    text = ''
-      #!/bin/sh
-      sudo sed -i "" '/downloads.slack-edge.com/d' /etc/hosts
-    '';
-  };
+  # Hook to unblock Slack domain before nix rebuild (appended to _PRE_NRS)
+  environment.interactiveShellInit = ''
+    _PRE_NRS="$_PRE_NRS; sudo sed -i ''' '/downloads.slack-edge.com/d' /etc/hosts"
+  '';
 }

@@ -32,10 +32,11 @@
       if pkgs.stdenv.isDarwin
       then "check"
       else "test";
+    hook = "eval \"$_PRE_NRS\" 2>/dev/null;";
   in {
-    nrs = "for h in /etc/nix-hooks/pre-nrs.d/*; do [ -x \"$h\" ] && \"$h\"; done 2>/dev/null; sudo ${rebuild} switch --flake ~/.dotfiles --impure";
-    nrt = "sudo ${rebuild} ${test} --flake ~/.dotfiles --impure";
-    nrb = "sudo ${rebuild} boot --flake ~/.dotfiles --impure";
+    nrs = "${hook} sudo ${rebuild} switch --flake ~/.dotfiles --impure";
+    nrt = "${hook} sudo ${rebuild} ${test} --flake ~/.dotfiles --impure";
+    nrb = "${hook} sudo ${rebuild} boot --flake ~/.dotfiles --impure";
     nrbr = "nrb && reboot";
     nfu = "nix flake update --flake ~/.dotfiles --impure";
     ngc = "sudo nix-collect-garbage -d && nrs";
