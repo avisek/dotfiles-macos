@@ -35,6 +35,7 @@
     nodejs
     pnpm
     claude-code
+    antigravity
 
     obsidian
     # mas
