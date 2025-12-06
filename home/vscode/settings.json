@@ -135,10 +135,6 @@
 
   // Extensions
 
-  "claudeCode.preferredLocation": "panel",
-  "claudeCode.allowDangerouslySkipPermissions": true,
-  "claudeCode.selectedModel": "opus",
-
   "liveServer.settings.donotVerifyTags": true,
   "liveServer.settings.donotShowInfoMsg": true
 }
