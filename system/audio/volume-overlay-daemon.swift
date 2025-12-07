@@ -26,231 +26,47 @@ struct OverlayData {
     let muted: MuteState
 }
 
-// MARK: - Volume Overlay Window
+// MARK: - Icon View (Custom Drawing)
 
-class VolumeOverlayWindow: NSWindow {
-    init() {
-        super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 60),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        
-        level = .screenSaver
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = true
-        ignoresMouseEvents = true
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+class IconView: NSView {
+    var deviceType: DeviceType = .output
+    var volume: VolumeState = .level(1.0)
+    var muted: MuteState = .unmuted
+    
+    override var intrinsicContentSize: NSSize {
+        return NSSize(width: 24, height: 24)
     }
-}
-
-// MARK: - Volume Overlay View
-
-class VolumeOverlayView: NSView {
-    private var data: OverlayData?
     
-    private let padding: CGFloat = 16
-    private let iconSize: CGFloat = 24
-    private let barHeight: CGFloat = 4
-    private let cornerRadius: CGFloat = 12
-    private let spacing: CGFloat = 10
-    
-    func update(with data: OverlayData) {
-        self.data = data
+    func update(type: DeviceType, volume: VolumeState, muted: MuteState) {
+        self.deviceType = type
+        self.volume = volume
+        self.muted = muted
         needsDisplay = true
-        
-        // Calculate required width based on content
-        let requiredWidth = calculateRequiredWidth(for: data)
-        let newFrame = NSRect(x: 0, y: 0, width: requiredWidth, height: 60)
-        
-        if frame.size != newFrame.size {
-            setFrameSize(newFrame.size)
-            window?.setContentSize(newFrame.size)
-        }
-    }
-    
-    private func calculateRequiredWidth(for data: OverlayData) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
-        let nameAttrs: [NSAttributedString.Key: Any] = [.font: font]
-        let smallAttrs: [NSAttributedString.Key: Any] = [.font: smallFont]
-        
-        let textWidth: CGFloat
-        switch (data.volume, data.muted) {
-        case (.unsupported, _):
-            // Device name in medium font + suffix in small font
-            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
-            let suffixWidth = (" does not support volume" as NSString).size(withAttributes: smallAttrs).width
-            textWidth = nameWidth + suffixWidth
-        case (_, .unsupported):
-            // Device name in medium font + suffix in small font
-            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
-            let suffixWidth = (" does not support muting" as NSString).size(withAttributes: smallAttrs).width
-            textWidth = nameWidth + suffixWidth
-        case (.level(let value), let muteState):
-            // Name + spacing + right text (percentage or "Muted")
-            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
-            let rightText: String
-            if case .muted = muteState {
-                rightText = "Muted"
-            } else {
-                rightText = "\(Int(round(value * 100)))%"
-            }
-            let rightWidth = (rightText as NSString).size(withAttributes: smallAttrs).width
-            textWidth = nameWidth + spacing + rightWidth
-        }
-        
-        let minWidth: CGFloat = 320
-        let contentWidth = padding + iconSize + spacing + textWidth + padding
-        
-        return max(minWidth, contentWidth)
-    }
-    
-    private func volumePercentage(_ volume: VolumeState) -> String {
-        switch volume {
-        case .level(let value):
-            return "\(Int(round(value * 100)))%"
-        case .unsupported:
-            return ""
-        }
     }
     
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
-        guard let data = data else { return }
-        
-        // Draw background
-        let bgPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
-        NSColor(white: 0.1, alpha: 0.92).setFill()
-        bgPath.fill()
-        
-        // Draw border
-        NSColor(white: 0.3, alpha: 0.5).setStroke()
-        bgPath.lineWidth = 0.5
-        bgPath.stroke()
-        
-        // Calculate layout
-        let iconRect = NSRect(
-            x: padding,
-            y: bounds.height - padding - iconSize + 4,
-            width: iconSize,
-            height: iconSize
-        )
-        
-        // Draw icon
-        drawIcon(in: iconRect, data: data)
-        
-        // Draw text
-        let textX = iconRect.maxX + spacing
-        let textY = bounds.height - padding
-        
-        let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
-        
-        switch (data.volume, data.muted) {
-        case (.unsupported, _):
-            // Volume unsupported message - device name in white, suffix in small font
-            let nameAttrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: NSColor.white
-            ]
-            let suffixAttrs: [NSAttributedString.Key: Any] = [
-                .font: smallFont,
-                .foregroundColor: NSColor.white.withAlphaComponent(0.7)
-            ]
-            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
-            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
-            (" does not support volume" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY - 16), withAttributes: suffixAttrs)
-            
-            // Draw full orange bar
-            drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
-            
-        case (_, .unsupported):
-            // Mute unsupported message - device name in white, suffix in small font
-            let nameAttrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: NSColor.white
-            ]
-            let suffixAttrs: [NSAttributedString.Key: Any] = [
-                .font: smallFont,
-                .foregroundColor: NSColor.white.withAlphaComponent(0.7)
-            ]
-            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
-            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
-            (" does not support muting" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY - 16), withAttributes: suffixAttrs)
-            
-            // Draw full orange bar
-            drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
-            
-        case (.level(let value), let muteState):
-            // Device name
-            let nameAttrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: NSColor.white
-            ]
-            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
-            
-            // Percentage or "Muted"
-            let rightText: String
-            let rightColor: NSColor
-            
-            if case .muted = muteState {
-                rightText = "Muted"
-                rightColor = NSColor.white.withAlphaComponent(0.6)
-            } else {
-                rightText = "\(Int(round(value * 100)))%"
-                rightColor = NSColor.white.withAlphaComponent(0.8)
-            }
-            
-            let rightAttrs: [NSAttributedString.Key: Any] = [
-                .font: smallFont,
-                .foregroundColor: rightColor
-            ]
-            let rightSize = (rightText as NSString).size(withAttributes: rightAttrs)
-            let rightX = bounds.width - padding - rightSize.width
-            (rightText as NSString).draw(at: NSPoint(x: rightX, y: textY - 16), withAttributes: rightAttrs)
-            
-            // Draw volume bar
-            let barColor: NSColor
-            if case .muted = muteState {
-                barColor = NSColor.white.withAlphaComponent(0.3)
-            } else {
-                barColor = NSColor.white
-            }
-            drawVolumeBar(progress: value, color: barColor)
-        }
-    }
-    
-    private func drawIcon(in rect: NSRect, data: OverlayData) {
-        let isMuted = data.muted == .muted
-        let isInput = data.type == .input
-        
-        NSGraphicsContext.saveGraphicsState()
+        let isMuted = muted == .muted
         
         let iconColor: NSColor
         if isMuted {
-            iconColor = NSColor.white.withAlphaComponent(0.5)
+            iconColor = NSColor.labelColor.withAlphaComponent(0.5)
         } else {
-            iconColor = NSColor.white
+            iconColor = NSColor.labelColor
         }
         iconColor.setFill()
         iconColor.setStroke()
         
-        if isInput {
-            // Draw microphone icon
-            drawMicrophoneIcon(in: rect, muted: isMuted)
+        if deviceType == .input {
+            drawMicrophoneIcon(muted: isMuted)
         } else {
-            // Draw speaker icon
-            drawSpeakerIcon(in: rect, data: data, muted: isMuted)
+            drawSpeakerIcon(muted: isMuted)
         }
-        
-        NSGraphicsContext.restoreGraphicsState()
     }
     
-    private func drawSpeakerIcon(in rect: NSRect, data: OverlayData, muted: Bool) {
+    private func drawSpeakerIcon(muted: Bool) {
+        let rect = bounds
         let centerY = rect.midY
         let scale = rect.width / 24
         
@@ -278,15 +94,14 @@ class VolumeOverlayView: NSView {
             xPath.stroke()
         } else {
             // Draw sound waves based on volume
-            let volume: Float
-            if case .level(let v) = data.volume {
-                volume = v
+            let vol: Float
+            if case .level(let v) = volume {
+                vol = v
             } else {
-                volume = 1.0
+                vol = 1.0
             }
             
-            if volume > 0 {
-                // First wave (small)
+            if vol > 0 {
                 let wave1 = NSBezierPath()
                 wave1.lineWidth = 1.5 * scale
                 wave1.lineCapStyle = .round
@@ -300,8 +115,7 @@ class VolumeOverlayView: NSView {
                 wave1.stroke()
             }
             
-            if volume > 0.33 {
-                // Second wave (medium)
+            if vol > 0.33 {
                 let wave2 = NSBezierPath()
                 wave2.lineWidth = 1.5 * scale
                 wave2.lineCapStyle = .round
@@ -315,8 +129,7 @@ class VolumeOverlayView: NSView {
                 wave2.stroke()
             }
             
-            if volume > 0.66 {
-                // Third wave (large)
+            if vol > 0.66 {
                 let wave3 = NSBezierPath()
                 wave3.lineWidth = 1.5 * scale
                 wave3.lineCapStyle = .round
@@ -332,7 +145,8 @@ class VolumeOverlayView: NSView {
         }
     }
     
-    private func drawMicrophoneIcon(in rect: NSRect, muted: Bool) {
+    private func drawMicrophoneIcon(muted: Bool) {
+        let rect = bounds
         let centerX = rect.midX
         let centerY = rect.midY
         let scale = rect.width / 24
@@ -372,36 +186,317 @@ class VolumeOverlayView: NSView {
         standLine.stroke()
         
         if muted {
-            // Draw diagonal line through microphone
             let muteLine = NSBezierPath()
             muteLine.lineWidth = 2 * scale
             muteLine.lineCapStyle = .round
-            NSColor.white.withAlphaComponent(0.5).setStroke()
+            NSColor.labelColor.withAlphaComponent(0.5).setStroke()
             muteLine.move(to: NSPoint(x: rect.minX + 4 * scale, y: rect.maxY - 4 * scale))
             muteLine.line(to: NSPoint(x: rect.maxX - 4 * scale, y: rect.minY + 4 * scale))
             muteLine.stroke()
         }
     }
+}
+
+// MARK: - Volume Bar View
+
+class VolumeBarView: NSView {
+    var progress: Float = 1.0
+    var barColor: NSColor = .labelColor
+    var isWarning: Bool = false
     
-    private func drawVolumeBar(progress: Float, color: NSColor) {
-        let barY: CGFloat = padding - 2
-        let barX: CGFloat = padding
-        let barWidth = bounds.width - (padding * 2)
+    private let barHeight: CGFloat = 4
+    
+    override var intrinsicContentSize: NSSize {
+        return NSSize(width: NSView.noIntrinsicMetric, height: barHeight)
+    }
+    
+    func update(progress: Float, muted: Bool, isWarning: Bool) {
+        self.progress = progress
+        self.isWarning = isWarning
+        
+        if isWarning {
+            self.barColor = NSColor.systemOrange.withAlphaComponent(0.6)
+        } else if muted {
+            self.barColor = NSColor.labelColor.withAlphaComponent(0.3)
+        } else {
+            self.barColor = NSColor.labelColor
+        }
+        
+        needsDisplay = true
+    }
+    
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        
+        let barRect = NSRect(x: 0, y: 0, width: bounds.width, height: barHeight)
         
         // Background bar
-        let bgRect = NSRect(x: barX, y: barY, width: barWidth, height: barHeight)
-        let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
-        NSColor.white.withAlphaComponent(0.2).setFill()
+        let bgPath = NSBezierPath(roundedRect: barRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
+        NSColor.labelColor.withAlphaComponent(0.15).setFill()
         bgPath.fill()
         
         // Progress bar
         if progress > 0 {
-            let progressWidth = barWidth * CGFloat(min(max(progress, 0), 1))
-            let progressRect = NSRect(x: barX, y: barY, width: progressWidth, height: barHeight)
+            let progressWidth = bounds.width * CGFloat(min(max(progress, 0), 1))
+            let progressRect = NSRect(x: 0, y: 0, width: progressWidth, height: barHeight)
             let progressPath = NSBezierPath(roundedRect: progressRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
-            color.setFill()
+            barColor.setFill()
             progressPath.fill()
         }
+    }
+}
+
+// MARK: - Volume Overlay Content View
+
+class VolumeOverlayContentView: NSView {
+    private let iconView = IconView()
+    private let nameLabel = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let volumeBar = VolumeBarView()
+    
+    private var statusLabelTrailingToSuperview: NSLayoutConstraint!
+    private var statusLabelTrailingToStatusLabel: NSLayoutConstraint!
+    
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupViews()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+    
+    private func setupViews() {
+        // Configure icon
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        
+        // Configure name label
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameLabel.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        nameLabel.textColor = NSColor.labelColor
+        nameLabel.backgroundColor = .clear
+        nameLabel.isBezeled = false
+        nameLabel.isEditable = false
+        nameLabel.isSelectable = false
+        nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        nameLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        
+        // Configure status label (percentage/muted/unsupported suffix)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        statusLabel.textColor = NSColor.secondaryLabelColor
+        statusLabel.backgroundColor = .clear
+        statusLabel.isBezeled = false
+        statusLabel.isEditable = false
+        statusLabel.isSelectable = false
+        statusLabel.alignment = .right
+        statusLabel.setContentHuggingPriority(.required, for: .horizontal)
+        statusLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        
+        // Configure volume bar
+        volumeBar.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Add subviews
+        addSubview(iconView)
+        addSubview(nameLabel)
+        addSubview(statusLabel)
+        addSubview(volumeBar)
+        
+        // Create constraints
+        statusLabelTrailingToSuperview = statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16)
+        statusLabelTrailingToStatusLabel = statusLabel.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 0)
+        
+        NSLayoutConstraint.activate([
+            // Icon constraints
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -2),
+            iconView.widthAnchor.constraint(equalToConstant: 24),
+            iconView.heightAnchor.constraint(equalToConstant: 24),
+            
+            // Name label constraints
+            nameLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 10),
+            nameLabel.centerYAnchor.constraint(equalTo: iconView.centerYAnchor),
+            
+            // Status label constraints
+            statusLabel.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),
+            statusLabelTrailingToSuperview,
+            
+            // Volume bar constraints
+            volumeBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            volumeBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            volumeBar.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            volumeBar.heightAnchor.constraint(equalToConstant: 4),
+        ])
+    }
+    
+    func update(with data: OverlayData) {
+        iconView.update(type: data.type, volume: data.volume, muted: data.muted)
+        
+        let isMuted = data.muted == .muted
+        
+        switch (data.volume, data.muted) {
+        case (.unsupported, _):
+            nameLabel.stringValue = data.name
+            nameLabel.textColor = NSColor.labelColor
+            statusLabel.stringValue = " does not support volume"
+            statusLabel.textColor = NSColor.secondaryLabelColor
+            volumeBar.update(progress: 1.0, muted: false, isWarning: true)
+            
+            // Status follows name directly
+            statusLabelTrailingToSuperview.isActive = false
+            statusLabelTrailingToStatusLabel.isActive = true
+            nameLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            
+        case (_, .unsupported):
+            nameLabel.stringValue = data.name
+            nameLabel.textColor = NSColor.labelColor
+            statusLabel.stringValue = " does not support muting"
+            statusLabel.textColor = NSColor.secondaryLabelColor
+            volumeBar.update(progress: 1.0, muted: false, isWarning: true)
+            
+            // Status follows name directly
+            statusLabelTrailingToSuperview.isActive = false
+            statusLabelTrailingToStatusLabel.isActive = true
+            nameLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+            
+        case (.level(let value), let muteState):
+            nameLabel.stringValue = data.name
+            nameLabel.textColor = NSColor.labelColor
+            
+            if case .muted = muteState {
+                statusLabel.stringValue = "Muted"
+                statusLabel.textColor = NSColor.secondaryLabelColor
+            } else {
+                statusLabel.stringValue = "\(Int(round(value * 100)))%"
+                statusLabel.textColor = NSColor.labelColor.withAlphaComponent(0.8)
+            }
+            
+            volumeBar.update(progress: value, muted: isMuted, isWarning: false)
+            
+            // Status aligned to trailing edge
+            statusLabelTrailingToStatusLabel.isActive = false
+            statusLabelTrailingToSuperview.isActive = true
+            nameLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        }
+        
+        needsLayout = true
+    }
+    
+    override var intrinsicContentSize: NSSize {
+        let nameSize = nameLabel.intrinsicContentSize
+        let statusSize = statusLabel.intrinsicContentSize
+        
+        let textWidth = nameSize.width + statusSize.width
+        let minWidth: CGFloat = 320
+        let contentWidth = 16 + 24 + 10 + textWidth + 16
+        
+        return NSSize(width: max(minWidth, contentWidth), height: 60)
+    }
+}
+
+// MARK: - Volume Overlay Window
+
+class VolumeOverlayWindow: NSWindow {
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 60),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        
+        level = .screenSaver
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    }
+}
+
+// MARK: - Volume Overlay View (Container with Blur)
+
+class VolumeOverlayView: NSView {
+    private let visualEffectView: NSVisualEffectView
+    private let contentView: VolumeOverlayContentView
+    private let cornerRadius: CGFloat = 14
+    
+    override init(frame frameRect: NSRect) {
+        visualEffectView = NSVisualEffectView()
+        contentView = VolumeOverlayContentView()
+        
+        super.init(frame: frameRect)
+        
+        setupViews()
+    }
+    
+    required init?(coder: NSCoder) {
+        visualEffectView = NSVisualEffectView()
+        contentView = VolumeOverlayContentView()
+        
+        super.init(coder: coder)
+        
+        setupViews()
+    }
+    
+    private func setupViews() {
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.masksToBounds = true
+        
+        // Configure visual effect view (blur background)
+        visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+        visualEffectView.material = .hudWindow
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.state = .active
+        visualEffectView.wantsLayer = true
+        visualEffectView.layer?.cornerRadius = cornerRadius
+        visualEffectView.layer?.masksToBounds = true
+        
+        // Configure content view
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        
+        addSubview(visualEffectView)
+        addSubview(contentView)
+        
+        NSLayoutConstraint.activate([
+            visualEffectView.topAnchor.constraint(equalTo: topAnchor),
+            visualEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            visualEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            visualEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+    
+    func update(with data: OverlayData) {
+        contentView.update(with: data)
+        
+        // Update window size based on content
+        let newSize = contentView.intrinsicContentSize
+        if let window = window {
+            let currentFrame = window.frame
+            let newFrame = NSRect(
+                x: currentFrame.origin.x - (newSize.width - currentFrame.width) / 2,
+                y: currentFrame.origin.y,
+                width: newSize.width,
+                height: newSize.height
+            )
+            window.setFrame(newFrame, display: true)
+        }
+        
+        invalidateIntrinsicContentSize()
+    }
+    
+    override var intrinsicContentSize: NSSize {
+        return contentView.intrinsicContentSize
     }
 }
 
@@ -431,8 +526,7 @@ class VolumeOverlayController {
         // Create window if needed
         if window == nil {
             window = VolumeOverlayWindow()
-            overlayView = VolumeOverlayView(frame: window!.contentView!.bounds)
-            overlayView!.autoresizingMask = [.width, .height]
+            overlayView = VolumeOverlayView(frame: NSRect(x: 0, y: 0, width: 320, height: 60))
             window!.contentView = overlayView
         }
         
@@ -468,7 +562,6 @@ class VolumeOverlayController {
                 window.animator().alphaValue = 1.0
             }
         }
-        // If visible and not fading out, just update content (already done above)
         
         // Schedule hide
         hideTimer = Timer.scheduledTimer(withTimeInterval: hideDelay, repeats: false) { [weak self] _ in
@@ -706,4 +799,3 @@ let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()
-
