@@ -53,7 +53,7 @@ class VolumeOverlayView: NSView {
     
     private let padding: CGFloat = 16
     private let iconSize: CGFloat = 24
-    private let barHeight: CGFloat = 6
+    private let barHeight: CGFloat = 4
     private let cornerRadius: CGFloat = 12
     private let spacing: CGFloat = 10
     
@@ -121,7 +121,7 @@ class VolumeOverlayView: NSView {
         // Calculate layout
         let iconRect = NSRect(
             x: padding,
-            y: bounds.height - padding - iconSize,
+            y: bounds.height - padding - iconSize + 4,
             width: iconSize,
             height: iconSize
         )
@@ -131,7 +131,7 @@ class VolumeOverlayView: NSView {
         
         // Draw text
         let textX = iconRect.maxX + spacing
-        let textY = bounds.height - padding - 4
+        let textY = bounds.height - padding
         
         let font = NSFont.systemFont(ofSize: 14, weight: .medium)
         let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
@@ -244,13 +244,13 @@ class VolumeOverlayView: NSView {
         if muted {
             // Draw X for mute
             let xPath = NSBezierPath()
-            xPath.lineWidth = 2 * scale
+            xPath.lineWidth = 1.5 * scale
             xPath.lineCapStyle = .round
             
-            xPath.move(to: NSPoint(x: rect.minX + 15 * scale, y: centerY + 4 * scale))
-            xPath.line(to: NSPoint(x: rect.minX + 21 * scale, y: centerY - 4 * scale))
-            xPath.move(to: NSPoint(x: rect.minX + 21 * scale, y: centerY + 4 * scale))
-            xPath.line(to: NSPoint(x: rect.minX + 15 * scale, y: centerY - 4 * scale))
+            xPath.move(to: NSPoint(x: rect.minX + 15 * scale, y: centerY + 3 * scale))
+            xPath.line(to: NSPoint(x: rect.minX + 21 * scale, y: centerY - 3 * scale))
+            xPath.move(to: NSPoint(x: rect.minX + 21 * scale, y: centerY + 3 * scale))
+            xPath.line(to: NSPoint(x: rect.minX + 15 * scale, y: centerY - 3 * scale))
             xPath.stroke()
         } else {
             // Draw sound waves based on volume
@@ -268,7 +268,7 @@ class VolumeOverlayView: NSView {
                 wave1.lineCapStyle = .round
                 wave1.appendArc(
                     withCenter: NSPoint(x: rect.minX + 12 * scale, y: centerY),
-                    radius: 4 * scale,
+                    radius: 3 * scale,
                     startAngle: -40,
                     endAngle: 40,
                     clockwise: false
@@ -283,7 +283,7 @@ class VolumeOverlayView: NSView {
                 wave2.lineCapStyle = .round
                 wave2.appendArc(
                     withCenter: NSPoint(x: rect.minX + 12 * scale, y: centerY),
-                    radius: 7 * scale,
+                    radius: 6.5 * scale,
                     startAngle: -40,
                     endAngle: 40,
                     clockwise: false
@@ -316,13 +316,13 @@ class VolumeOverlayView: NSView {
         // Microphone body (capsule)
         let micBody = NSBezierPath(
             roundedRect: NSRect(
-                x: centerX - 4 * scale,
+                x: centerX - 3 * scale,
                 y: centerY - 2 * scale,
-                width: 8 * scale,
-                height: 12 * scale
+                width: 6 * scale,
+                height: 11 * scale
             ),
-            xRadius: 4 * scale,
-            yRadius: 4 * scale
+            xRadius: 3 * scale,
+            yRadius: 3 * scale
         )
         micBody.fill()
         
@@ -331,10 +331,10 @@ class VolumeOverlayView: NSView {
         standArc.lineWidth = 1.5 * scale
         standArc.lineCapStyle = .round
         standArc.appendArc(
-            withCenter: NSPoint(x: centerX, y: centerY + 2 * scale),
+            withCenter: NSPoint(x: centerX, y: centerY + 1 * scale),
             radius: 6 * scale,
-            startAngle: 180,
-            endAngle: 0,
+            startAngle: 0,
+            endAngle: 180,
             clockwise: true
         )
         standArc.stroke()
@@ -343,17 +343,9 @@ class VolumeOverlayView: NSView {
         let standLine = NSBezierPath()
         standLine.lineWidth = 1.5 * scale
         standLine.lineCapStyle = .round
-        standLine.move(to: NSPoint(x: centerX, y: centerY - 4 * scale))
+        standLine.move(to: NSPoint(x: centerX, y: centerY - 5 * scale))
         standLine.line(to: NSPoint(x: centerX, y: centerY - 8 * scale))
         standLine.stroke()
-        
-        // Base horizontal
-        let baseLine = NSBezierPath()
-        baseLine.lineWidth = 1.5 * scale
-        baseLine.lineCapStyle = .round
-        baseLine.move(to: NSPoint(x: centerX - 4 * scale, y: centerY - 8 * scale))
-        baseLine.line(to: NSPoint(x: centerX + 4 * scale, y: centerY - 8 * scale))
-        baseLine.stroke()
         
         if muted {
             // Draw diagonal line through microphone
