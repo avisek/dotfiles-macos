@@ -53,7 +53,7 @@ class VolumeOverlayView: NSView {
     
     private let padding: CGFloat = 16
     private let iconSize: CGFloat = 24
-    private let barHeight: CGFloat = 6
+    private let barHeight: CGFloat = 4
     private let cornerRadius: CGFloat = 12
     private let spacing: CGFloat = 10
     
@@ -73,24 +73,34 @@ class VolumeOverlayView: NSView {
     
     private func calculateRequiredWidth(for data: OverlayData) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
         let attrs: [NSAttributedString.Key: Any] = [.font: font]
+        let smallAttrs: [NSAttributedString.Key: Any] = [.font: smallFont]
         
-        let text: String
+        let contentWidth: CGFloat
         switch (data.volume, data.muted) {
         case (.unsupported, _):
-            text = "\(data.name) does not support volume"
+            let text = "\(data.name) does not support volume"
+            let textWidth = (text as NSString).size(withAttributes: attrs).width
+            contentWidth = padding + iconSize + spacing + textWidth + padding
         case (_, .unsupported):
-            text = "\(data.name) does not support muting"
+            let text = "\(data.name) does not support muting"
+            let textWidth = (text as NSString).size(withAttributes: attrs).width
+            contentWidth = padding + iconSize + spacing + textWidth + padding
+        case (.level(_), .muted):
+            // Name + "Muted"
+            let nameWidth = (data.name as NSString).size(withAttributes: attrs).width
+            let mutedWidth = ("Muted" as NSString).size(withAttributes: smallAttrs).width
+            contentWidth = padding + iconSize + spacing + nameWidth + spacing + mutedWidth + padding
         default:
             // Name + percentage
+            let nameWidth = (data.name as NSString).size(withAttributes: attrs).width
             let percentage = volumePercentage(data.volume)
-            text = "\(data.name)\(percentage)"
+            let percentWidth = (percentage as NSString).size(withAttributes: smallAttrs).width
+            contentWidth = padding + iconSize + spacing + nameWidth + spacing + percentWidth + padding
         }
         
-        let textWidth = (text as NSString).size(withAttributes: attrs).width
         let minWidth: CGFloat = 320
-        let contentWidth = padding + iconSize + spacing + textWidth + spacing + padding
-        
         return max(minWidth, contentWidth)
     }
     
@@ -131,32 +141,44 @@ class VolumeOverlayView: NSView {
         
         // Draw text
         let textX = iconRect.maxX + spacing
-        let textY = bounds.height - padding - 4
-        
         let font = NSFont.systemFont(ofSize: 14, weight: .medium)
         let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
         
+        // Calculate text baseline to vertically center with icon
+        let textHeight = ("Ag" as NSString).size(withAttributes: [.font: font]).height
+        let textY = iconRect.midY - textHeight / 2
+        
         switch (data.volume, data.muted) {
         case (.unsupported, _):
-            // Volume unsupported message
-            let text = "\(data.name) does not support volume"
-            let attrs: [NSAttributedString.Key: Any] = [
+            // Volume unsupported message - device name in white, rest dimmed
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.white
+            ]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.7)
             ]
-            (text as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: attrs)
+            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
+            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY), withAttributes: nameAttrs)
+            (" does not support volume" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY), withAttributes: suffixAttrs)
             
             // Draw full orange bar
             drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
             
         case (_, .unsupported):
-            // Mute unsupported message
-            let text = "\(data.name) does not support muting"
-            let attrs: [NSAttributedString.Key: Any] = [
+            // Mute unsupported message - device name in white, rest dimmed
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.white
+            ]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.7)
             ]
-            (text as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: attrs)
+            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
+            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY), withAttributes: nameAttrs)
+            (" does not support muting" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY), withAttributes: suffixAttrs)
             
             // Draw full orange bar
             drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
@@ -167,7 +189,7 @@ class VolumeOverlayView: NSView {
                 .font: font,
                 .foregroundColor: NSColor.white
             ]
-            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
+            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY), withAttributes: nameAttrs)
             
             // Percentage or "Muted"
             let rightText: String
@@ -187,7 +209,7 @@ class VolumeOverlayView: NSView {
             ]
             let rightSize = (rightText as NSString).size(withAttributes: rightAttrs)
             let rightX = bounds.width - padding - rightSize.width
-            (rightText as NSString).draw(at: NSPoint(x: rightX, y: textY - 16), withAttributes: rightAttrs)
+            (rightText as NSString).draw(at: NSPoint(x: rightX, y: textY), withAttributes: rightAttrs)
             
             // Draw volume bar
             let barColor: NSColor
@@ -313,11 +335,11 @@ class VolumeOverlayView: NSView {
         let centerY = rect.midY
         let scale = rect.width / 24
         
-        // Microphone body (capsule)
+        // Microphone body (capsule) - positioned in upper portion
         let micBody = NSBezierPath(
             roundedRect: NSRect(
                 x: centerX - 4 * scale,
-                y: centerY - 2 * scale,
+                y: centerY,
                 width: 8 * scale,
                 height: 12 * scale
             ),
@@ -326,24 +348,24 @@ class VolumeOverlayView: NSView {
         )
         micBody.fill()
         
-        // Microphone stand (arc)
+        // Microphone stand (arc) - U-shape below the mic body
         let standArc = NSBezierPath()
         standArc.lineWidth = 1.5 * scale
         standArc.lineCapStyle = .round
         standArc.appendArc(
             withCenter: NSPoint(x: centerX, y: centerY + 2 * scale),
             radius: 6 * scale,
-            startAngle: 180,
-            endAngle: 0,
+            startAngle: 0,
+            endAngle: 180,
             clockwise: true
         )
         standArc.stroke()
         
-        // Stand base
+        // Stand vertical line (from arc bottom to base)
         let standLine = NSBezierPath()
         standLine.lineWidth = 1.5 * scale
         standLine.lineCapStyle = .round
-        standLine.move(to: NSPoint(x: centerX, y: centerY - 4 * scale))
+        standLine.move(to: NSPoint(x: centerX, y: centerY + 2 * scale - 6 * scale))
         standLine.line(to: NSPoint(x: centerX, y: centerY - 8 * scale))
         standLine.stroke()
         
