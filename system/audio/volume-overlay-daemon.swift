@@ -73,23 +73,37 @@ class VolumeOverlayView: NSView {
     
     private func calculateRequiredWidth(for data: OverlayData) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font]
+        let smallFont = NSFont.systemFont(ofSize: 13, weight: .regular)
+        let nameAttrs: [NSAttributedString.Key: Any] = [.font: font]
+        let smallAttrs: [NSAttributedString.Key: Any] = [.font: smallFont]
         
-        let text: String
+        let textWidth: CGFloat
         switch (data.volume, data.muted) {
         case (.unsupported, _):
-            text = "\(data.name) does not support volume"
+            // Device name in medium font + suffix in small font
+            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
+            let suffixWidth = (" does not support volume" as NSString).size(withAttributes: smallAttrs).width
+            textWidth = nameWidth + suffixWidth
         case (_, .unsupported):
-            text = "\(data.name) does not support muting"
-        default:
-            // Name + percentage
-            let percentage = volumePercentage(data.volume)
-            text = "\(data.name)\(percentage)"
+            // Device name in medium font + suffix in small font
+            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
+            let suffixWidth = (" does not support muting" as NSString).size(withAttributes: smallAttrs).width
+            textWidth = nameWidth + suffixWidth
+        case (.level(let value), let muteState):
+            // Name + spacing + right text (percentage or "Muted")
+            let nameWidth = (data.name as NSString).size(withAttributes: nameAttrs).width
+            let rightText: String
+            if case .muted = muteState {
+                rightText = "Muted"
+            } else {
+                rightText = "\(Int(round(value * 100)))%"
+            }
+            let rightWidth = (rightText as NSString).size(withAttributes: smallAttrs).width
+            textWidth = nameWidth + spacing + rightWidth
         }
         
-        let textWidth = (text as NSString).size(withAttributes: attrs).width
         let minWidth: CGFloat = 320
-        let contentWidth = padding + iconSize + spacing + textWidth + spacing + padding
+        let contentWidth = padding + iconSize + spacing + textWidth + padding
         
         return max(minWidth, contentWidth)
     }
@@ -138,25 +152,35 @@ class VolumeOverlayView: NSView {
         
         switch (data.volume, data.muted) {
         case (.unsupported, _):
-            // Volume unsupported message
-            let text = "\(data.name) does not support volume"
-            let attrs: [NSAttributedString.Key: Any] = [
+            // Volume unsupported message - device name in white, suffix in small font
+            let nameAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
+                .foregroundColor: NSColor.white
+            ]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [
+                .font: smallFont,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.7)
             ]
-            (text as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: attrs)
+            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
+            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
+            (" does not support volume" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY - 16), withAttributes: suffixAttrs)
             
             // Draw full orange bar
             drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
             
         case (_, .unsupported):
-            // Mute unsupported message
-            let text = "\(data.name) does not support muting"
-            let attrs: [NSAttributedString.Key: Any] = [
+            // Mute unsupported message - device name in white, suffix in small font
+            let nameAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
+                .foregroundColor: NSColor.white
+            ]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [
+                .font: smallFont,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.7)
             ]
-            (text as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: attrs)
+            let nameSize = (data.name as NSString).size(withAttributes: nameAttrs)
+            (data.name as NSString).draw(at: NSPoint(x: textX, y: textY - 16), withAttributes: nameAttrs)
+            (" does not support muting" as NSString).draw(at: NSPoint(x: textX + nameSize.width, y: textY - 16), withAttributes: suffixAttrs)
             
             // Draw full orange bar
             drawVolumeBar(progress: 1.0, color: NSColor.orange.withAlphaComponent(0.6))
