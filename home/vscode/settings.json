@@ -78,6 +78,7 @@
 
   "explorer.confirmDragAndDrop": false,
   "explorer.confirmDelete": false,
+  "files.hotExit": "onExitAndWindowClose",
 
   "javascript.updateImportsOnFileMove.enabled": "always",
   "typescript.updateImportsOnFileMove.enabled": "always",
