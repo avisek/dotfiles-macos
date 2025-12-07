@@ -445,8 +445,20 @@ class VolumeOverlayController {
         positionWindow(window)
         
         // Show and fade in
-        if !window.isVisible || isFadingOut {
+        if isFadingOut {
+            // Interrupt fade out - animate from current alpha to 1.0
             isFadingOut = false
+            let currentAlpha = window.alphaValue
+            let remainingFade = 1.0 - currentAlpha
+            let duration = fadeInDuration * remainingFade
+            
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 1.0
+            }
+        } else if !window.isVisible {
+            // Fresh show - start from alpha 0
             window.alphaValue = 0
             window.orderFrontRegardless()
             
@@ -456,6 +468,7 @@ class VolumeOverlayController {
                 window.animator().alphaValue = 1.0
             }
         }
+        // If visible and not fading out, just update content (already done above)
         
         // Schedule hide
         hideTimer = Timer.scheduledTimer(withTimeInterval: hideDelay, repeats: false) { [weak self] _ in
