@@ -15,6 +15,7 @@
     ./homebrew.nix
     ./podman.nix
     ./work.nix
+    ./mitmproxy.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
