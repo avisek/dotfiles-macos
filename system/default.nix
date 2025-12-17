@@ -15,7 +15,7 @@
     ./homebrew.nix
     ./podman.nix
     ./work.nix
-    ./mitmproxy.nix
+    ./cursor-analytics-blocker.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
