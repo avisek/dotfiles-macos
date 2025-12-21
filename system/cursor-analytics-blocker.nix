@@ -5,11 +5,11 @@
   ...
 }: let
   blockedUrls = [
-    "https://api2.cursor.sh/aiserver.v1.AiService/ReportCommitAiAnalytics"
-    "https://api2.cursor.sh/aiserver.v1.AnalyticsService/Batch"
-    "https://api2.cursor.sh/aiserver.v1.AiService/ReportClientNumericMetrics"
-    "https://api2.cursor.sh/aiserver.v1.AiService/ReportAiCodeChangeMetrics"
-    "https://api2.cursor.sh/aiserver.v1.FastApplyService/ReportEditFate"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportCommitAiAnalytics"
+    "api2.cursor.sh/aiserver.v1.AnalyticsService/Batch"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportClientNumericMetrics"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportAiCodeChangeMetrics"
+    "api2.cursor.sh/aiserver.v1.FastApplyService/ReportEditFate"
   ];
 
   mitmproxyPort = 49200;
@@ -23,8 +23,7 @@
   # Convert URL list to mitmproxy blocking rules
   urlsToBlockingRules = urls: let
     parseUrl = url: let
-      withoutProtocol = lib.removePrefix "https://" (lib.removePrefix "http://" url);
-      parts = lib.splitString "/" withoutProtocol;
+      parts = lib.splitString "/" url;
       host = lib.head parts;
       path = "/" + lib.concatStringsSep "/" (lib.tail parts);
     in {inherit host path;};
@@ -75,17 +74,12 @@
 
     CURSOR_PATH="${cursorPath}"
     CERT_FILE="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
-    MITM_PID_FILE="/tmp/mitmproxy-cursor-$$.pid"
+    MITM_PID=""
 
-    # Cleanup function
     cleanup() {
-      if [ -f "$MITM_PID_FILE" ]; then
-        MITM_PID=$(cat "$MITM_PID_FILE")
-        if kill -0 "$MITM_PID" 2>/dev/null; then
-          echo "Stopping mitmproxy..."
-          kill "$MITM_PID" 2>/dev/null || true
-        fi
-        rm -f "$MITM_PID_FILE"
+      if [ -n "$MITM_PID" ] && kill -0 "$MITM_PID" 2>/dev/null; then
+        echo "Stopping mitmproxy..."
+        kill "$MITM_PID" 2>/dev/null || true
       fi
     }
     trap cleanup EXIT INT TERM
@@ -106,7 +100,7 @@
         ${pkgs.mitmproxy}/bin/mitmdump --no-server --rfile /dev/null &>/dev/null
       fi
 
-      # Install certificate
+      # Install certificate to system keychain
       if [ -f "$CERT_FILE" ]; then
         echo "Installing certificate to system keychain (requires password)..."
         if sudo security add-trusted-cert -d -r trustRoot \
@@ -130,11 +124,10 @@
       --set block_global=false \
       --set connection_strategy=lazy \
       --quiet \
-      --scripts "${blockScript}" \
+      -s "${blockScript}" \
       2>&1 &
 
     MITM_PID=$!
-    echo "$MITM_PID" > "$MITM_PID_FILE"
 
     # Wait for mitmproxy to start
     sleep 1
