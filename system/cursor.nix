@@ -5,8 +5,8 @@
   ...
 }: let
   blockedUrls = [
-    "api2.cursor.sh/aiserver.v1.AiService/ReportCommitAiAnalytics"
     "api2.cursor.sh/aiserver.v1.AnalyticsService/Batch"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportCommitAiAnalytics"
     "api2.cursor.sh/aiserver.v1.AiService/ReportClientNumericMetrics"
     "api2.cursor.sh/aiserver.v1.AiService/ReportAiCodeChangeMetrics"
     "api2.cursor.sh/aiserver.v1.FastApplyService/ReportEditFate"
@@ -38,7 +38,7 @@
 
     hostBlocks = lib.mapAttrsToList generateHostBlock byHost;
   in
-    lib.concatStringsSep ",\n        " hostBlocks;
+    lib.concatStringsSep ",\n    " hostBlocks;
 
   blockScript = pkgs.writeText "block-cursor-analytics.py" ''
     from mitmproxy import http
@@ -47,7 +47,7 @@
     import time
 
     BLOCKED_ENDPOINTS = {
-        ${urlsToBlockingRules blockedUrls}
+      ${urlsToBlockingRules blockedUrls}
     }
 
     # ANSI color codes
@@ -62,88 +62,88 @@
     RESET = "\033[0m"
 
     def format_size(size):
-        if size < 1024:
-            return f"{size}b"
-        elif size < 1024 * 1024:
-            return f"{size/1024:.1f}k"
-        else:
-            return f"{size/(1024*1024):.1f}M"
+      if size < 1024:
+        return f"{size}b"
+      elif size < 1024 * 1024:
+        return f"{size/1024:.1f}k"
+      else:
+        return f"{size/(1024*1024):.1f}M"
 
     def format_time(ms):
-        return f"{int(ms)}ms" if ms < 1000 else f"{ms/1000:.1f}s"
+      return f"{int(ms)}ms" if ms < 1000 else f"{ms/1000:.1f}s"
 
     def format_path(path):
-        if "?" in path:
-            path_part, query_part = path.split("?", 1)
-            query_str = f"{GRAY}?{query_part}{RESET}"
-        else:
-            path_part = path
-            query_str = ""
+      if "?" in path:
+        path_part, query_part = path.split("?", 1)
+        query_str = f"{GRAY}?{query_part}{RESET}"
+      else:
+        path_part = path
+        query_str = ""
 
-        segments = path_part.split("/")
-        if len(segments) > 1 and segments[-1]:
-            base = "/".join(segments[:-1])
-            last = segments[-1]
-            return f"{GRAY}{base}/{RESET}{WHITE}{last}{RESET}{query_str}"
-        return f"{WHITE}{path_part}{RESET}{query_str}"
+      segments = path_part.split("/")
+      if len(segments) > 1 and segments[-1]:
+        base = "/".join(segments[:-1])
+        last = segments[-1]
+        return f"{GRAY}{base}/{RESET}{WHITE}{last}{RESET}{query_str}"
+      return f"{WHITE}{path_part}{RESET}{query_str}"
 
     def get_method_color(method):
-        if method == "GET":
-            return GREEN
-        elif method == "POST":
-            return YELLOW
-        else:
-            return ORANGE
+      if method == "GET":
+        return GREEN
+      elif method == "POST":
+        return YELLOW
+      else:
+        return ORANGE
 
     def get_status_color(status):
-        if 200 <= status < 300:
-            return GREEN
-        elif status >= 500:
-            return RED
-        else:
-            return ORANGE
+      if 200 <= status < 300:
+        return GREEN
+      elif status >= 500:
+        return RED
+      else:
+        return ORANGE
 
     def request(flow: http.HTTPFlow) -> None:
-        flow.metadata["start_time"] = time.time()
+      flow.metadata["start_time"] = time.time()
 
-        host = flow.request.host
-        path = flow.request.path
-        is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
+      host = flow.request.host
+      path = flow.request.path
+      is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
 
-        if is_blocked:
-            flow.response = http.Response.make(
-                200,
-                b"",
-                {"Content-Type": "application/proto", "Content-Length": "0"}
-            )
+      if is_blocked:
+        flow.response = http.Response.make(
+          200,
+          b"",
+          {"Content-Type": "application/proto", "Content-Length": "0"}
+        )
 
     def response(flow: http.HTTPFlow) -> None:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        method = flow.request.method
-        host = flow.request.host
-        path = flow.request.path
+      timestamp = datetime.now().strftime("%H:%M:%S")
+      method = flow.request.method
+      host = flow.request.host
+      path = flow.request.path
 
-        status = flow.response.status_code if flow.response else 0
-        size = len(flow.response.content) if flow.response else 0
-        content_type = flow.response.headers.get("content-type", "").split(";")[0] if flow.response else "-"
+      status = flow.response.status_code if flow.response else 0
+      size = len(flow.response.content) if flow.response else 0
+      content_type = flow.response.headers.get("content-type", "").split(";")[0] if flow.response else "-"
 
-        start_time = flow.metadata.get("start_time", time.time())
-        response_time = (time.time() - start_time) * 1000
+      start_time = flow.metadata.get("start_time", time.time())
+      response_time = (time.time() - start_time) * 1000
 
-        is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
-        blocked_indicator = "🚫 " if is_blocked else ""
+      is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
+      blocked_indicator = "🚫 " if is_blocked else ""
 
-        print(
-            f"{GRAY}{timestamp}{RESET} "
-            f"{get_method_color(method)}{method:4}{RESET} "
-            f"{host}{format_path(path)} "
-            f"{blocked_indicator}{get_status_color(status)}{status}{RESET} "
-            f"{CYAN}{content_type}{RESET} "
-            f"{MAGENTA}{format_size(size)}{RESET} "
-            f"{GRAY}{format_time(response_time)}{RESET}",
-            file=sys.stderr,
-            flush=True
-        )
+      print(
+        f"{GRAY}{timestamp}{RESET} "
+        f"{get_method_color(method)}{method:4}{RESET} "
+        f"{host}{format_path(path)} "
+        f"{blocked_indicator}{get_status_color(status)}{status}{RESET} "
+        f"{CYAN}{content_type}{RESET} "
+        f"{MAGENTA}{format_size(size)}{RESET} "
+        f"{GRAY}{format_time(response_time)}{RESET}",
+        file=sys.stderr,
+        flush=True
+      )
   '';
 
   cursorBlocked = pkgs.writeScriptBin "cursor-blocked" ''
@@ -232,7 +232,13 @@
   '';
 in {
   environment.systemPackages = [
-    pkgs.mitmproxy
     cursorBlocked
   ];
+
+  services.skhd = {
+    enable = true;
+    skhdConfig = ''
+      alt + shift - c : cursor-blocked
+    '';
+  };
 }
