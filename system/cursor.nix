@@ -223,6 +223,7 @@
     # Launch Cursor with proxy settings
     HTTP_PROXY=http://localhost:${toString mitmproxyPort} \
     HTTPS_PROXY=http://localhost:${toString mitmproxyPort} \
+    GIT_SSL_CAINFO="$CERT_FILE" \
     "$CURSOR_PATH" "$@" &
 
     CURSOR_PID=$!
