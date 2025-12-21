@@ -1,0 +1,245 @@
+{
+  lib,
+  pkgs,
+  config,
+  ...
+}: let
+  blockedUrls = [
+    "api2.cursor.sh/aiserver.v1.AnalyticsService/Batch"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportCommitAiAnalytics"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportClientNumericMetrics"
+    "api2.cursor.sh/aiserver.v1.AiService/ReportAiCodeChangeMetrics"
+    "api2.cursor.sh/aiserver.v1.FastApplyService/ReportEditFate"
+  ];
+
+  # Get the user's home directory
+  homeDir = config.users.users.${config.system.primaryUser}.home;
+
+  # Cursor installation path
+  cursorPath = "${homeDir}/Applications/Home Manager Apps/Cursor.app/Contents/MacOS/Cursor";
+
+  mitmproxyPort = 49200;
+
+  # Parse "host/path" into {host, path} and group by host
+  urlsToBlockingRules = urls: let
+    parseUrl = url: let
+      parts = lib.splitString "/" url;
+      host = lib.head parts;
+      path = "/" + lib.concatStringsSep "/" (lib.tail parts);
+    in {inherit host path;};
+
+    parsed = map parseUrl urls;
+    byHost = lib.groupBy (x: x.host) parsed;
+
+    generateHostBlock = host: paths: let
+      pathList = lib.concatMapStringsSep ", " (p: ''"${p.path}"'') paths;
+    in ''
+      "${host}": [${pathList}]'';
+
+    hostBlocks = lib.mapAttrsToList generateHostBlock byHost;
+  in
+    lib.concatStringsSep ",\n    " hostBlocks;
+
+  blockScript = pkgs.writeText "block-cursor-analytics.py" ''
+    from mitmproxy import http
+    from datetime import datetime
+    import sys
+    import time
+
+    BLOCKED_ENDPOINTS = {
+      ${urlsToBlockingRules blockedUrls}
+    }
+
+    # ANSI color codes
+    GRAY = "\033[90m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    CYAN = "\033[96m"
+    MAGENTA = "\033[95m"
+    ORANGE = "\033[38;5;208m"
+    WHITE = "\033[97m"
+    RESET = "\033[0m"
+
+    def format_size(size):
+      if size < 1024:
+        return f"{size}b"
+      elif size < 1024 * 1024:
+        return f"{size/1024:.1f}k"
+      else:
+        return f"{size/(1024*1024):.1f}M"
+
+    def format_time(ms):
+      return f"{int(ms)}ms" if ms < 1000 else f"{ms/1000:.1f}s"
+
+    def format_path(path):
+      if "?" in path:
+        path_part, query_part = path.split("?", 1)
+        query_str = f"{GRAY}?{query_part}{RESET}"
+      else:
+        path_part = path
+        query_str = ""
+
+      segments = path_part.split("/")
+      if len(segments) > 1 and segments[-1]:
+        base = "/".join(segments[:-1])
+        last = segments[-1]
+        return f"{GRAY}{base}/{RESET}{WHITE}{last}{RESET}{query_str}"
+      return f"{WHITE}{path_part}{RESET}{query_str}"
+
+    def get_method_color(method):
+      if method == "GET":
+        return GREEN
+      elif method == "POST":
+        return YELLOW
+      else:
+        return ORANGE
+
+    def get_status_color(status):
+      if 200 <= status < 300:
+        return GREEN
+      elif status >= 500:
+        return RED
+      else:
+        return ORANGE
+
+    def request(flow: http.HTTPFlow) -> None:
+      flow.metadata["start_time"] = time.time()
+
+      host = flow.request.host
+      path = flow.request.path
+      is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
+
+      if is_blocked:
+        flow.response = http.Response.make(
+          200,
+          b"",
+          {"Content-Type": "application/proto", "Content-Length": "0"}
+        )
+
+    def response(flow: http.HTTPFlow) -> None:
+      timestamp = datetime.now().strftime("%H:%M:%S")
+      method = flow.request.method
+      host = flow.request.host
+      path = flow.request.path
+
+      status = flow.response.status_code if flow.response else 0
+      size = len(flow.response.content) if flow.response else 0
+      content_type = flow.response.headers.get("content-type", "").split(";")[0] if flow.response else "-"
+
+      start_time = flow.metadata.get("start_time", time.time())
+      response_time = (time.time() - start_time) * 1000
+
+      is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
+      blocked_indicator = "🚫 " if is_blocked else ""
+
+      print(
+        f"{GRAY}{timestamp}{RESET} "
+        f"{get_method_color(method)}{method:4}{RESET} "
+        f"{host}{format_path(path)} "
+        f"{blocked_indicator}{get_status_color(status)}{status}{RESET} "
+        f"{CYAN}{content_type}{RESET} "
+        f"{MAGENTA}{format_size(size)}{RESET} "
+        f"{GRAY}{format_time(response_time)}{RESET}",
+        file=sys.stderr,
+        flush=True
+      )
+  '';
+
+  cursorBlocked = pkgs.writeScriptBin "cursor-blocked" ''
+    #!${pkgs.bash}/bin/bash
+    set -e
+
+    CURSOR_PATH="${cursorPath}"
+    CERT_FILE="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
+    MITM_PID=""
+
+    cleanup() {
+      if [ -n "$MITM_PID" ] && kill -0 "$MITM_PID" 2>/dev/null; then
+        echo "Stopping mitmproxy..."
+        kill "$MITM_PID" 2>/dev/null || true
+      fi
+    }
+    trap cleanup EXIT INT TERM
+
+    # Check if Cursor exists
+    if [ ! -f "$CURSOR_PATH" ]; then
+      echo "Error: Cursor not found at $CURSOR_PATH" >&2
+      exit 1
+    fi
+
+    # Install certificate if needed
+    if ! security find-certificate -c "mitmproxy" /Library/Keychains/System.keychain &>/dev/null; then
+      echo "Setting up mitmproxy certificate..."
+
+      # Generate certificate if it doesn't exist
+      if [ ! -f "$CERT_FILE" ]; then
+        echo "Generating certificate..."
+        ${pkgs.mitmproxy}/bin/mitmdump --no-server --rfile /dev/null &>/dev/null
+      fi
+
+      # Install certificate to system keychain
+      if [ -f "$CERT_FILE" ]; then
+        echo "Installing certificate to system keychain (requires password)..."
+        if sudo security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain \
+            "$CERT_FILE" 2>/dev/null; then
+          echo "Certificate installed successfully!"
+        else
+          echo "Error: Failed to install certificate" >&2
+          exit 1
+        fi
+      else
+        echo "Error: Certificate file not found" >&2
+        exit 1
+      fi
+    fi
+
+    # Start mitmproxy in background
+    echo "Starting mitmproxy on port ${toString mitmproxyPort}..."
+    ${pkgs.mitmproxy}/bin/mitmdump \
+      --mode "regular@${toString mitmproxyPort}" \
+      --set block_global=false \
+      --set connection_strategy=lazy \
+      --quiet \
+      -s "${blockScript}" \
+      2>&1 &
+
+    MITM_PID=$!
+
+    # Wait for mitmproxy to start
+    sleep 1
+
+    # Check if mitmproxy is running
+    if ! kill -0 "$MITM_PID" 2>/dev/null; then
+      echo "Error: Failed to start mitmproxy" >&2
+      exit 1
+    fi
+
+    echo "Launching Cursor with analytics blocking..."
+    echo "Logs will appear below. Press Ctrl+C to stop."
+    echo "---"
+
+    # Launch Cursor with proxy settings
+    HTTP_PROXY=http://localhost:${toString mitmproxyPort} \
+    HTTPS_PROXY=http://localhost:${toString mitmproxyPort} \
+    GIT_SSL_CAINFO="$CERT_FILE" \
+    "$CURSOR_PATH" "$@" &
+
+    CURSOR_PID=$!
+
+    # Wait for Cursor to exit
+    wait "$CURSOR_PID" 2>/dev/null || true
+  '';
+in {
+  environment.systemPackages = [
+    cursorBlocked
+  ];
+
+  services.skhd = {
+    enable = true;
+    skhdConfig = ''
+      alt + shift - c : cursor-blocked
+    '';
+  };
+}
