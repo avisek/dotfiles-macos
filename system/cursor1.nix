@@ -12,15 +12,15 @@
     "api2.cursor.sh/aiserver.v1.FastApplyService/ReportEditFate"
   ];
 
+  mitmproxyPort = 49200;
+
   # Get the user's home directory
   homeDir = config.users.users.${config.system.primaryUser}.home;
 
   # Cursor installation path
   cursorPath = "${homeDir}/Applications/Home Manager Apps/Cursor.app/Contents/MacOS/Cursor";
 
-  mitmproxyPort = 49200;
-
-  # Parse "host/path" into {host, path} and group by host
+  # Convert URL list to mitmproxy blocking rules
   urlsToBlockingRules = urls: let
     parseUrl = url: let
       parts = lib.splitString "/" url;
@@ -44,7 +44,6 @@
     from mitmproxy import http
     from datetime import datetime
     import sys
-    import time
 
     BLOCKED_ENDPOINTS = {
         ${urlsToBlockingRules blockedUrls}
@@ -52,62 +51,19 @@
 
     # ANSI color codes
     GRAY = "\033[90m"
+    DARK_GRAY = "\033[38;5;240m"
     RED = "\033[91m"
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
+    BLUE = "\033[94m"
     CYAN = "\033[96m"
-    MAGENTA = "\033[95m"
-    ORANGE = "\033[38;5;208m"
     WHITE = "\033[97m"
     RESET = "\033[0m"
 
-    def format_size(size):
-        if size < 1024:
-            return f"{size}b"
-        elif size < 1024 * 1024:
-            return f"{size/1024:.1f}k"
-        else:
-            return f"{size/(1024*1024):.1f}M"
-
-    def format_time(ms):
-        return f"{int(ms)}ms" if ms < 1000 else f"{ms/1000:.1f}s"
-
-    def format_path(path):
-        if "?" in path:
-            path_part, query_part = path.split("?", 1)
-            query_str = f"{GRAY}?{query_part}{RESET}"
-        else:
-            path_part = path
-            query_str = ""
-
-        segments = path_part.split("/")
-        if len(segments) > 1 and segments[-1]:
-            base = "/".join(segments[:-1])
-            last = segments[-1]
-            return f"{GRAY}{base}/{RESET}{WHITE}{last}{RESET}{query_str}"
-        return f"{WHITE}{path_part}{RESET}{query_str}"
-
-    def get_method_color(method):
-        if method == "GET":
-            return GREEN
-        elif method == "POST":
-            return YELLOW
-        else:
-            return ORANGE
-
-    def get_status_color(status):
-        if 200 <= status < 300:
-            return GREEN
-        elif status >= 500:
-            return RED
-        else:
-            return ORANGE
-
     def request(flow: http.HTTPFlow) -> None:
-        flow.metadata["start_time"] = time.time()
-
         host = flow.request.host
         path = flow.request.path
+
         is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
 
         if is_blocked:
@@ -118,29 +74,77 @@
             )
 
     def response(flow: http.HTTPFlow) -> None:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        method = flow.request.method
         host = flow.request.host
         path = flow.request.path
-
-        status = flow.response.status_code if flow.response else 0
-        size = len(flow.response.content) if flow.response else 0
-        content_type = flow.response.headers.get("content-type", "").split(";")[0] if flow.response else "-"
-
-        start_time = flow.metadata.get("start_time", time.time())
-        response_time = (time.time() - start_time) * 1000
+        method = flow.request.method
+        timestamp = datetime.now().strftime("%H:%M:%S")
 
         is_blocked = host in BLOCKED_ENDPOINTS and path in BLOCKED_ENDPOINTS[host]
-        blocked_indicator = "🚫 " if is_blocked else ""
 
+        # Response info
+        status = flow.response.status_code if flow.response else 0
+        size = len(flow.response.content) if flow.response else 0
+        content_type = flow.response.headers.get("content-type", "").split(";")[0] if flow.response else ""
+
+        # Calculate response time in milliseconds
+        if flow.response and flow.request.timestamp_start:
+            response_time = int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)
+            time_str = f"{response_time}ms"
+        else:
+            time_str = "0ms"
+
+        # Format size
+        if size < 1024:
+            size_str = f"{size}b"
+        elif size < 1024 * 1024:
+            size_str = f"{size/1024:.1f}k"
+        else:
+            size_str = f"{size/(1024*1024):.1f}M"
+
+        # Parse path: separate query params and highlight last segment
+        if "?" in path:
+            path_part, query_part = path.split("?", 1)
+            query_str = f"{DARK_GRAY}?{query_part}{RESET}"
+        else:
+            path_part = path
+            query_str = ""
+
+        path_segments = path_part.split("/")
+        if len(path_segments) > 1:
+            path_prefix = "/".join(path_segments[:-1])
+            last_segment = path_segments[-1]
+            formatted_path = f"{GRAY}{path_prefix}/{RESET}{WHITE}{last_segment}{RESET}{query_str}"
+        else:
+            formatted_path = f"{WHITE}{path_part}{RESET}{query_str}"
+
+        # Status color and indicator
+        if is_blocked:
+            status_indicator = f"{RED}🚫{RESET} "
+            status_color = RED
+        elif status == 200:
+            status_indicator = ""
+            status_color = GREEN
+        elif 400 <= status < 500:
+            status_indicator = ""
+            status_color = YELLOW
+        elif status >= 500:
+            status_indicator = ""
+            status_color = RED
+        else:
+            status_indicator = ""
+            status_color = RESET
+
+        # Method color
+        method_color = YELLOW if method == "POST" else BLUE if method == "GET" else CYAN
+
+        # Format: TIME METHOD HOST/PATH STATUS TYPE SIZE TIME
         print(
             f"{GRAY}{timestamp}{RESET} "
-            f"{get_method_color(method)}{method:4}{RESET} "
-            f"{host}{format_path(path)} "
-            f"{blocked_indicator}{get_status_color(status)}{status}{RESET} "
+            f"{method_color}{method}{RESET} "
+            f"{host}{formatted_path} "
+            f"{status_indicator}{status_color}{status}{RESET} "
             f"{CYAN}{content_type}{RESET} "
-            f"{MAGENTA}{format_size(size)}{RESET} "
-            f"{GRAY}{format_time(response_time)}{RESET}",
+            f"{GRAY}{size_str} {time_str}{RESET}",
             file=sys.stderr,
             flush=True
         )

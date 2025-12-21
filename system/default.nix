@@ -41,6 +41,7 @@
     # mas
     # iina
     # the-unarchiver
+    kitty
   ];
 
   environment.variables = {
