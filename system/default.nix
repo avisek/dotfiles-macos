@@ -36,6 +36,8 @@
     nodejs
     pnpm
     antigravity
+    nodePackages.vercel
+    ngrok
 
     obsidian
     # mas
@@ -46,6 +48,7 @@
 
   environment.variables = {
     NEXT_TELEMETRY_DISABLED = "1";
+    VERCEL_TELEMETRY_DISABLED = "1";
   };
 
   # Necessary for using flakes on this system.
