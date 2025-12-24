@@ -1,34 +1,35 @@
-{
+{config, ...}: let
+  homeDir = config.users.users.${config.system.primaryUser}.home;
+in {
   system.defaults = {
-    NSGlobalDomain.AppleInterfaceStyle = "Dark";
-    NSGlobalDomain.AppleShowAllExtensions = true;
-    NSGlobalDomain.KeyRepeat = 2;
-    NSGlobalDomain.InitialKeyRepeat = 15;
-    finder.FXPreferredViewStyle = "Nlsv";
+    NSGlobalDomain = {
+      AppleInterfaceStyle = "Dark";
+      InitialKeyRepeat = 15;
+      KeyRepeat = 2;
+    };
+    finder = {
+      _FXShowPosixPathInTitle = true;
+      AppleShowAllExtensions = true;
+      AppleShowAllFiles = true;
+      FXPreferredViewStyle = "Nlsv";
+      FXRemoveOldTrashItems = true;
+    };
     dock = {
       autohide = true;
+      show-recents = false;
+      static-only = true;
       persistent-apps = [
-        {
-          app = "/Applications/Safari.app";
-        }
-        {
-          spacer = {
-            small = false;
-          };
-        }
-        {
-          spacer = {
-            small = true;
-          };
-        }
-        {
-          folder = "/System/Applications/Utilities";
-        }
-        {
-          file = "/Users/avisek/Downloads/test.csv";
-        }
+        {app = "/Applications/Nix Apps/Google Chrome.app";}
+        {app = "/Applications/Nix Apps/kitty.app";}
+        {app = "${homeDir}/Applications/Home Manager Apps/Cursor.app";}
+        {app = "/Applications/Nix Apps/Slack.app";}
       ];
-      wvous-br-corner = 1
+      showhidden = true;
+      wvous-br-corner = 1;
+      appswitcher-all-displays = true;
+    };
+    CustomUserPreferences.NSGlobalDomain = {
+      "com.apple.mouse.linear" = true;
     };
   };
 }
