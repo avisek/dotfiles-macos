@@ -37,6 +37,8 @@
       # "logseq"
       # "notion"
       # "discord"
+
+      "steam"
     ];
 
     # masApps = {
