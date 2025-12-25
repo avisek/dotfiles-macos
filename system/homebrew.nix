@@ -45,6 +45,7 @@
     #   Yoink = 457622435;
     # };
 
+    caskArgs.no_quarantine = true;
     onActivation.cleanup = "zap";
   };
 
