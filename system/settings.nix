@@ -30,6 +30,7 @@ in {
     };
     CustomUserPreferences.NSGlobalDomain = {
       "com.apple.mouse.linear" = true;
+      "com.apple.mouse.scaling" = 1;
     };
   };
 }
