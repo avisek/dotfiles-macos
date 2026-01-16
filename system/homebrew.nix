@@ -31,14 +31,16 @@
       # ~/Library/Application\ Support/io.ganeshrvel.openmtp
       # ~/Library/Preferences/io.ganeshrvel.openmtp.plist
 
-      # "iina"
+      "iina"
       # "the-unarchiver"
       # "obsidian"
       # "logseq"
       # "notion"
       # "discord"
 
+      "audiorelay"
       "steam"
+      "monitorcontrol"
     ];
 
     # masApps = {
