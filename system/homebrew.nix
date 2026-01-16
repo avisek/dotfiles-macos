@@ -19,11 +19,6 @@
     enable = true;
 
     casks = [
-      "smoothscroll"
-      # ~/Library/Preferences/com.galambalazs.SmoothScroll.plist
-      # ~/Library/HTTPStorages/com.galambalazs.SmoothScroll
-      # ~/Library/Caches/com.galambalazs.SmoothScroll
-
       # "linearmouse"
 
       "openmtp"

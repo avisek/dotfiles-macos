@@ -13,6 +13,7 @@
     ./nightshift.nix
     ./hotkeys.nix
     ./homebrew.nix
+    ./smoothscroll.nix
     ./podman.nix
     ./work.nix
     ./cursor.nix
