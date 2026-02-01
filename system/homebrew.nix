@@ -1,20 +1,4 @@
-{
-  system.activationScripts.applications.text = ''
-    if ! xcode-select -p &> /dev/null; then
-      echo "Xcode Command Line Tools not found. Installing..."
-      xcode-select --install
-
-      echo "Waiting for Xcode Command Line Tools installation..."
-      until xcode-select -p &> /dev/null; do
-        sleep 5
-      done
-
-      echo "Xcode Command Line Tools installed successfully"
-    else
-      echo "Xcode Command Line Tools already installed at: $(xcode-select -p)"
-    fi
-  '';
-
+{pkgs, ...}: {
   homebrew = {
     enable = true;
 
@@ -38,9 +22,14 @@
       "monitorcontrol"
     ];
 
-    # masApps = {
-    #   Yoink = 457622435;
-    # };
+    brews = [
+      "mas" # mas search yoink
+    ];
+
+    masApps = {
+      # Yoink = 457622435; # Paid
+      Endel = 1346247457;
+    };
 
     caskArgs.no_quarantine = true;
     onActivation.cleanup = "zap";
@@ -51,4 +40,20 @@
     enableRosetta = true;
     user = "avisek";
   };
+
+  system.activationScripts.applications.text = ''
+    if ! xcode-select -p &> /dev/null; then
+      echo "Xcode Command Line Tools not found. Installing..."
+      xcode-select --install
+
+      echo "Waiting for Xcode Command Line Tools installation..."
+      until xcode-select -p &> /dev/null; do
+        sleep 5
+      done
+
+      echo "Xcode Command Line Tools installed successfully"
+    else
+      echo "Xcode Command Line Tools already installed at: $(xcode-select -p)"
+    fi
+  '';
 }
