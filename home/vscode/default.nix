@@ -16,30 +16,30 @@
   ];
 
   extensions = with pkgs.vscode-marketplace; [
-    # # Themes & Icons
-    # enkia.tokyo-night
-    # pkief.material-icon-theme
-    # zhuangtongfa.material-theme
-    # beardedbear.beardedtheme
+    # Themes & Icons
+    enkia.tokyo-night
+    pkief.material-icon-theme
+    zhuangtongfa.material-theme
+    beardedbear.beardedtheme
 
-    # # Editor Enhancements
-    # cardinal90.multi-cursor-case-preserve
-    # tobermory.es6-string-html
-    # yoavbls.pretty-ts-errors
-    # # github.vscode-pull-request-github
-    # # ms-vscode.live-server
-    # # ritwickdey.liveserver
-    # # rangav.vscode-thunder-client
-    # # mark-wiemer.vscode-autohotkey-plus-plus
+    # Editor Enhancements
+    cardinal90.multi-cursor-case-preserve
+    tobermory.es6-string-html
+    yoavbls.pretty-ts-errors
+    # github.vscode-pull-request-github
+    # ms-vscode.live-server
+    # ritwickdey.liveserver
+    # rangav.vscode-thunder-client
+    # mark-wiemer.vscode-autohotkey-plus-plus
 
-    # # Language Support
-    # # somewhatstationery.some-sass
-    # esbenp.prettier-vscode
-    # jnoortheen.nix-ide
-    # tamasfe.even-better-toml
-    # bradlc.vscode-tailwindcss
-    # prisma.prisma
-    # # crazywolf.smali
+    # Language Support
+    # somewhatstationery.some-sass
+    esbenp.prettier-vscode
+    jnoortheen.nix-ide
+    tamasfe.even-better-toml
+    bradlc.vscode-tailwindcss
+    prisma.prisma
+    # crazywolf.smali
   ];
 
   dotfilesPath = "${config.home.homeDirectory}/.dotfiles/home/vscode";
