@@ -71,7 +71,7 @@
   "workbench.iconTheme": "material-icon-theme",
 
   "workbench.colorCustomizations": {
-    "editorRuler.foreground": "#ffffff06"
+    "editorRuler.foreground": "#ffffff06",
   },
 
   // Explorer
@@ -89,8 +89,8 @@
   "terminal.integrated.profiles.windows": {
     "C:\\Program Files\\Git\\bin\\bash.exe (migrated)": {
       "path": "C:\\Program Files\\Git\\bin\\bash.exe",
-      "args": []
-    }
+      "args": [],
+    },
   },
 
   // Formatting
@@ -103,11 +103,11 @@
   "prettier.trailingComma": "all",
 
   "[prisma]": {
-    "editor.defaultFormatter": "Prisma.prisma"
+    "editor.defaultFormatter": "Prisma.prisma",
   },
 
   "[nix]": {
-    "editor.defaultFormatter": "jnoortheen.nix-ide"
+    "editor.defaultFormatter": "jnoortheen.nix-ide",
   },
 
   // Nix
@@ -115,14 +115,14 @@
   "nix.formatterPath": "alejandra",
   "nix.serverPath": "nil",
   "nix.serverSettings": {
-    "nil": { "formatting": { "command": ["alejandra"] } }
+    "nil": { "formatting": { "command": ["alejandra"] } },
   },
 
   // Suggestions
 
   "editor.suggest.insertMode": "replace",
   "editor.quickSuggestions": {
-    "strings": true
+    "strings": true,
   },
 
   // Linting
@@ -137,5 +137,5 @@
   // Extensions
 
   "liveServer.settings.donotVerifyTags": true,
-  "liveServer.settings.donotShowInfoMsg": true
+  "liveServer.settings.donotShowInfoMsg": true,
 }
