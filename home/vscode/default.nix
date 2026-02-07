@@ -40,6 +40,8 @@
     bradlc.vscode-tailwindcss
     prisma.prisma
     # crazywolf.smali
+
+    mkhl.direnv
   ];
 
   dotfilesPath = "${config.home.homeDirectory}/.dotfiles/home/vscode";

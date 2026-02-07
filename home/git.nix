@@ -1,6 +1,4 @@
 {
-  programs.gh.enable = true;
-
   programs.git = {
     enable = true;
 
@@ -13,5 +11,6 @@
     };
   };
 
+  programs.gh.enable = true;
   # echo "n" | gh auth login --git-protocol https --web --skip-ssh-key --clipboard --scopes repo,workflow
 }

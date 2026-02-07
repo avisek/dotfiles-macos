@@ -6,6 +6,7 @@
   imports = [
     # ./ssh.nix
     ./sh.nix
+    ./direnv.nix
     ./settings.nix
     ./power.nix
     ./audio.nix
