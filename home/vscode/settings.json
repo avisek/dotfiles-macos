@@ -110,6 +110,8 @@
     "editor.defaultFormatter": "jnoortheen.nix-ide",
   },
 
+  "tailwindCSS.classFunctions": ["cva", "cx"],
+
   // Nix
 
   "nix.formatterPath": "alejandra",
