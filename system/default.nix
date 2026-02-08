@@ -14,6 +14,7 @@
     ./nightshift.nix
     ./hotkeys.nix
     ./homebrew.nix
+    ./autoraise.nix
     ./smoothscroll.nix
     ./podman.nix
     ./work.nix

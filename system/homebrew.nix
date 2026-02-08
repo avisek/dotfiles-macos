@@ -1,6 +1,13 @@
-{pkgs, ...}: {
+{
   homebrew = {
     enable = true;
+
+    taps = [
+    ];
+
+    brews = [
+      "mas" # mas search yoink
+    ];
 
     casks = [
       # "linearmouse"
@@ -20,10 +27,6 @@
       "audiorelay"
       "steam"
       "monitorcontrol"
-    ];
-
-    brews = [
-      "mas" # mas search yoink
     ];
 
     masApps = {
