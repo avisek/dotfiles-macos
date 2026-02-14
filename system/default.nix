@@ -41,6 +41,7 @@
     antigravity
     nodePackages.vercel
     ngrok
+    claude-code
 
     obsidian
     # mas
