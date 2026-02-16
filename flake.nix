@@ -19,6 +19,11 @@
     mac-app-util.url = "github:hraban/mac-app-util";
 
     nix-vscode-extensions.url = "github:nix-community/nix-vscode-extensions";
+
+    android-nixpkgs = {
+      url = "github:tadfisher/android-nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs @ {
@@ -29,6 +34,7 @@
     nix-homebrew,
     mac-app-util,
     nix-vscode-extensions,
+    android-nixpkgs,
     ...
   }: {
     darwinConfigurations = {
@@ -43,11 +49,13 @@
           {
             home-manager.sharedModules = [
               mac-app-util.homeManagerModules.default
+              android-nixpkgs.hmModule
             ];
           }
           {
             nixpkgs.overlays = [
               nix-vscode-extensions.overlays.default
+              android-nixpkgs.overlays.default
             ];
           }
           ./home

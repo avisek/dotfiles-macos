@@ -9,9 +9,11 @@
 
       imports = [
         # ./ssh.nix
+        ./sh.nix
         ./git.nix
         ./vscode
         ./work.nix
+        ./android.nix
       ];
 
       home.stateVersion = "25.05";
