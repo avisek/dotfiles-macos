@@ -4,18 +4,14 @@
   pkgs,
   ...
 }: let
-  avdName = "headless";
+  avdName = "android-10";
   androidApi = "29";
   systemImageAbi = "arm64-v8a";
   systemImageTag = "google_apis_playstore";
-  emulatorSerial = "emulator-5554";
 
   lcdWidth = 720;
   lcdHeight = 1280;
   lcdDensity = 320;
-
-  windowWidth = lcdWidth / 2;
-  windowHeight = lcdHeight / 2;
 
   systemImageTagPkg = builtins.replaceStrings ["_"] ["-"] systemImageTag;
   systemImagePackage = "system-images;android-${androidApi};${systemImageTag};${systemImageAbi}";
@@ -23,12 +19,11 @@
   avdPath = "${config.home.homeDirectory}/.android/avd/${avdName}.avd";
 
   emulatorFlags = lib.concatStringsSep " " [
-    # "-no-window"
-    # "-no-audio"
     "-no-boot-anim"
-    "-no-snapshot"
+    "-no-snapstorage"
     "-gpu host"
     "-no-metrics"
+    "-no-location-ui"
     "-qemu -append androidboot.serialconsole=0"
   ];
 
@@ -148,9 +143,6 @@ in {
     android-delete = "avdmanager delete avd --name ${avdName}";
     android-create = ''echo "no" | avdmanager create avd --name ${avdName} --package "${systemImagePackage}" --tag "${systemImageTag}" --abi "${systemImageAbi}" --force'';
     android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags}";
-    android-wait = ''adb -s ${emulatorSerial} wait-for-device && until [ "$(adb -s ${emulatorSerial} shell getprop sys.boot_completed 2>/dev/null)" = "1" ]; do sleep 1; done && echo "Emulator ready"'';
-    android-scrcpy = "scrcpy --serial ${emulatorSerial} --render-driver=opengl --video-codec=av1 --window-width=${toString windowWidth} --window-height=${toString windowHeight}";
-    android-stop = "adb -s ${emulatorSerial} emu kill";
   };
 
   targets.darwin.defaults = {
