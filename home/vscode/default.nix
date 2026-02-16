@@ -23,14 +23,16 @@
     beardedbear.beardedtheme
 
     # Editor Enhancements
+    mkhl.direnv
     cardinal90.multi-cursor-case-preserve
     tobermory.es6-string-html
     yoavbls.pretty-ts-errors
-    # github.vscode-pull-request-github
+    github.vscode-pull-request-github
     # ms-vscode.live-server
     # ritwickdey.liveserver
     # rangav.vscode-thunder-client
     # mark-wiemer.vscode-autohotkey-plus-plus
+    anthropic.claude-code
 
     # Language Support
     # somewhatstationery.some-sass
@@ -40,8 +42,6 @@
     bradlc.vscode-tailwindcss
     prisma.prisma
     # crazywolf.smali
-
-    mkhl.direnv
   ];
 
   dotfilesPath = "${config.home.homeDirectory}/.dotfiles/home/vscode";

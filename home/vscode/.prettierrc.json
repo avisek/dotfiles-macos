@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": ["settings.json"],
+      "options": {
+        "parser": "jsonc"
+      }
+    }
+  ]
+}
