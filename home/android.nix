@@ -137,8 +137,6 @@ in {
     ];
   };
 
-  home.packages = with pkgs; [scrcpy];
-
   home.shellAliases = {
     android-delete = "avdmanager delete avd --name ${avdName}";
     android-create = ''echo "no" | avdmanager create avd --name ${avdName} --package "${systemImagePackage}" --tag "${systemImageTag}" --abi "${systemImageAbi}" --force'';
