@@ -28,8 +28,10 @@
   # Mutable working directories (outside Nix store)
   magiskDir = "${homeDir}/.android/magisk";
   patchedRamdiskPath = "${magiskDir}/ramdisk.img";
-  sshKeyDir = "${homeDir}/.android/shared";
-  sshKeyPath = "${sshKeyDir}/id_ed25519";
+
+  # WebDAV server for shared folder (loopback only, no auth needed)
+  webdavPort = "28080";
+  webdavPidFile = "${magiskDir}/webdav.pid";
 
   # ── Pinned dependencies ─────────────────────────────────────────────
 
@@ -79,18 +81,16 @@
     rm -f ramdisk.cpio ramdisk.cpio.tmp magiskboot
   '';
 
-  # Mounts the host shared folder via rclone SFTP + FUSE.
+  # Mounts the host shared folder via rclone WebDAV + FUSE.
+  # The host runs `rclone serve webdav` on loopback; the emulator reaches
+  # it at 10.0.2.2 (the emulator's alias for the host's 127.0.0.1).
   sharedMountScript = pkgs.writeText "mount-shared.sh" ''
     #!/system/bin/sh
     /data/local/tmp/rclone mount \
-      ":sftp:${sharedFolderHost}" ${sharedFolderGuest} \
-      --sftp-host 10.0.2.2 \
-      --sftp-user ${username} \
-      --sftp-key-file /data/local/tmp/id_ed25519 \
-      --sftp-known-hosts-file /data/local/tmp/known_hosts \
-      --sftp-set-modtime=false \
-      --no-modtime \
+      ":webdav:/" ${sharedFolderGuest} \
+      --webdav-url http://10.0.2.2:${webdavPort} \
       --vfs-cache-mode off \
+      --no-modtime \
       --daemon
   '';
 
@@ -169,44 +169,6 @@
     adb push ${rcloneAndroid}/rclone /data/local/tmp/rclone
     adb shell "su -c 'chmod 755 /data/local/tmp/rclone'"
 
-    echo "==> Setting up SSH key pair..."
-    mkdir -p "${sshKeyDir}"
-    if [ ! -f "${sshKeyPath}" ]; then
-      ssh-keygen -t ed25519 -f "${sshKeyPath}" -N "" -C "android-emulator"
-      echo "  Generated new SSH key pair."
-    else
-      echo "  SSH key already exists, reusing."
-    fi
-
-    mkdir -p "${homeDir}/.ssh"
-    touch "${homeDir}/.ssh/authorized_keys"
-    chmod 600 "${homeDir}/.ssh/authorized_keys"
-    if ! grep -qF "android-emulator" "${homeDir}/.ssh/authorized_keys"; then
-      cat "${sshKeyPath}.pub" >> "${homeDir}/.ssh/authorized_keys"
-      echo "  Added public key to ~/.ssh/authorized_keys."
-    else
-      echo "  Public key already in authorized_keys."
-    fi
-
-    echo "==> Pushing SSH private key to emulator..."
-    adb push "${sshKeyPath}" /data/local/tmp/id_ed25519
-    adb shell "su -c 'chmod 600 /data/local/tmp/id_ed25519'"
-
-    echo "==> Setting up host key verification..."
-    HOST_KEY=$(cat /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null \
-            || cat /etc/ssh/ssh_host_rsa_key.pub 2>/dev/null \
-            || echo "")
-    if [ -n "$HOST_KEY" ]; then
-      KEY_TYPE=$(echo "$HOST_KEY" | awk '{print $1}')
-      KEY_DATA=$(echo "$HOST_KEY" | awk '{print $2}')
-      echo "10.0.2.2 $KEY_TYPE $KEY_DATA" > "${sshKeyDir}/known_hosts"
-      adb push "${sshKeyDir}/known_hosts" /data/local/tmp/known_hosts
-      echo "  Pushed host key for 10.0.2.2."
-    else
-      echo "  Warning: Could not find host SSH public key."
-      echo "  Host key verification will not be available."
-    fi
-
     echo "==> Pushing mount script to emulator..."
     adb push ${sharedMountScript} /data/local/tmp/mount-shared.sh
     adb shell "su -c 'chmod 755 /data/local/tmp/mount-shared.sh'"
@@ -220,14 +182,31 @@
     echo "  Emulator mount: ${sharedFolderGuest}"
     echo ""
     echo "Use 'android-shared-mount' to mount the shared folder."
-    echo ""
-    echo "Make sure macOS Remote Login (SSH) is enabled:"
-    echo "  System Settings > General > Sharing > Remote Login"
   '';
 
   androidSharedMountScript = pkgs.writeShellScript "android-shared-mount" ''
     set -euo pipefail
-    echo "==> Mounting ${sharedFolderHost} at ${sharedFolderGuest}..."
+
+    PID_FILE="${webdavPidFile}"
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      echo "WebDAV server already running (pid $(cat "$PID_FILE"))."
+    else
+      echo "==> Starting WebDAV server on host (127.0.0.1:${webdavPort})..."
+      mkdir -p "${sharedFolderHost}"
+      rclone serve webdav "${sharedFolderHost}" \
+        --addr 127.0.0.1:${webdavPort} \
+        --read-only=false &
+      echo $! > "$PID_FILE"
+      sleep 1
+      if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+        echo "Error: WebDAV server failed to start."
+        rm -f "$PID_FILE"
+        exit 1
+      fi
+      echo "  WebDAV server started (pid $(cat "$PID_FILE"))."
+    fi
+
+    echo "==> Mounting inside emulator at ${sharedFolderGuest}..."
     adb shell "su -c 'mkdir -p ${sharedFolderGuest}'"
     adb shell "su -c 'sh /data/local/tmp/mount-shared.sh'"
     echo "Mounted. Files are accessible at ${sharedFolderGuest} inside the emulator."
@@ -235,10 +214,17 @@
 
   androidSharedUmountScript = pkgs.writeShellScript "android-shared-umount" ''
     set -euo pipefail
-    echo "==> Unmounting ${sharedFolderGuest}..."
+
+    echo "==> Unmounting ${sharedFolderGuest} in emulator..."
     adb shell "su -c 'umount ${sharedFolderGuest}'" 2>/dev/null \
-      || adb shell "su -c 'kill \$(cat /data/local/tmp/rclone.pid)'" 2>/dev/null \
-      || echo "Could not unmount (may not be mounted)."
+      || echo "  (was not mounted)"
+
+    PID_FILE="${webdavPidFile}"
+    if [ -f "$PID_FILE" ]; then
+      echo "==> Stopping WebDAV server on host..."
+      kill "$(cat "$PID_FILE")" 2>/dev/null || true
+      rm -f "$PID_FILE"
+    fi
     echo "Done."
   '';
 
@@ -352,6 +338,8 @@
     vm.heapSize=512M
   '';
 in {
+  home.packages = [pkgs.rclone];
+
   android-sdk = {
     enable = true;
 

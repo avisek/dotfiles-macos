@@ -19,7 +19,6 @@
     ./podman.nix
     ./work.nix
     ./cursor.nix
-    ./android.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
