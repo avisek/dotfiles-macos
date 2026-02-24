@@ -207,6 +207,11 @@
     #!/system/bin/sh
     export PATH=/data/local/tmp:$PATH
     MOUNT=${sharedFolderGuestMount}
+
+    # Kill any leftover rclone mount from a previous session
+    pkill -f "rclone mount" 2>/dev/null || true
+    umount "$MOUNT" 2>/dev/null || true
+    sleep 0.5
     mkdir -p "$MOUNT"
 
     /data/local/tmp/rclone mount \
@@ -217,13 +222,13 @@
       --no-modtime \
       --allow-other \
       --allow-non-empty \
-      --dir-cache-time 10s \
+      --dir-cache-time 0 \
       </dev/null >/dev/null 2>&1 &
 
     i=0
-    while [ $i -lt 15 ]; do
-      mount | grep -q "fuse.rclone.*$MOUNT" && exit 0
-      sleep 1
+    while [ $i -lt 50 ]; do
+      mount | grep -q "$MOUNT" && exit 0
+      sleep 0.2
       i=$((i + 1))
     done
     echo "Error: FUSE mount did not establish" >&2
@@ -349,7 +354,8 @@
       mkdir -p "${sharedFolderHost}"
       rclone serve webdav "${sharedFolderHost}" \
         --addr 127.0.0.1:${webdavPort} \
-        --read-only=false &
+        --read-only=false \
+        --dir-cache-time 0 &
       echo $! > "$PID_FILE"
       sleep 1
       if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -369,7 +375,7 @@
     set -euo pipefail
 
     echo "==> Unmounting ${sharedFolderGuest} in emulator..."
-    adb shell "su -c 'umount ${sharedFolderGuestMount}'" 2>/dev/null \
+    adb shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" \
       || echo "  (was not mounted)"
 
     PID_FILE="${webdavPidFile}"
