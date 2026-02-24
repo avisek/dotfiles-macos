@@ -126,7 +126,7 @@
       'lib/arm64-v8a/libmagiskboot.so' \
       'lib/arm64-v8a/libmagiskinit.so' \
       'lib/arm64-v8a/libmagisk64.so' \
-      'lib/arm64-v8a/libmagisk32.so' \
+      'lib/armeabi-v7a/libmagisk32.so' \
       -d "$WORK"
 
     echo "==> Pushing files to emulator..."
@@ -244,14 +244,15 @@
 
   # ── Emulator configuration ─────────────────────────────────────────
 
+  # -qemu must be last: everything after it is passed to QEMU, not the emulator.
   emulatorFlags = lib.concatStringsSep " " [
     "-no-boot-anim"
     "-no-snapstorage"
     "-gpu host"
     "-no-metrics"
     "-no-location-ui"
-    "-qemu -append androidboot.serialconsole=0"
   ];
+  qemuFlags = "-qemu -append androidboot.serialconsole=0";
 
   avdConfig = pkgs.writeText "${avdName}-config.ini" ''
     PlayStore.enabled=yes
@@ -366,7 +367,7 @@ in {
   home.shellAliases = {
     android-delete = "avdmanager delete avd --name ${avdName}";
     android-create = ''echo "no" | avdmanager create avd --name ${avdName} --package "${systemImagePackage}" --tag "${systemImageTag}" --abi "${systemImageAbi}" --force'';
-    android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags}" + " $([ -f ${patchedRamdiskPath} ] && echo '-ramdisk ${patchedRamdiskPath}')";
+    android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags}" + " $([ -f ${patchedRamdiskPath} ] && echo '-ramdisk ${patchedRamdiskPath}') ${qemuFlags}";
 
     android-root = "${androidRootScript}";
     android-shared-setup = "${androidSharedSetupScript}";
