@@ -29,9 +29,8 @@
   # making it visible to apps, not just adb shell.
   sharedFolderGuestMount = "/mnt/runtime/default/emulated/0/shared";
 
-  # Mutable working directories (outside Nix store)
-  magiskDir = "${homeDir}/.android/magisk";
-  patchedRamdiskPath = "${magiskDir}/ramdisk.img";
+  # Runtime state directory (PID files, etc.)
+  stateDir = "${homeDir}/.android/magisk";
 
   # Pin the emulator console port so its ADB serial is deterministic,
   # allowing all adb commands to target it even with other devices connected.
@@ -43,7 +42,7 @@
   # host :28080 via ADB's direct transport, bypassing the emulator's slow
   # SLiRP user-mode network stack.
   webdavPort = "28080";
-  webdavPidFile = "${magiskDir}/webdav.pid";
+  webdavPidFile = "${stateDir}/webdav.pid";
 
   # ── Pinned dependencies ─────────────────────────────────────────────
 
@@ -173,40 +172,66 @@
     '';
   };
 
-  # ── Device-side scripts (pushed to emulator, run inside Android) ────
+  # Patch the stock ramdisk with Magisk at Nix build time. Replicates what
+  # magiskboot does (CPIO manipulation, fstab patching, backup structure)
+  # using standard tools so we don't need the ARM64 Linux magiskboot binary.
+  stockRamdisk = "${config.android-sdk.finalPackage}/share/android-sdk/${systemImagePath}ramdisk.img";
 
-  # Patches the stock ramdisk with Magisk. Expects magiskboot, magiskinit,
-  # magisk32, magisk64, and ramdisk.cpio.tmp at /data/local/tmp/.
-  magiskPatchScript = pkgs.writeText "magisk-patch.sh" ''
-    set -e
-    cd /data/local/tmp
+  patchedRamdisk = pkgs.stdenv.mkDerivation {
+    name = "magisk-patched-ramdisk";
+    dontUnpack = true;
+    nativeBuildInputs = with pkgs; [cpio gzip xz unzip fakeroot gnused];
 
-    chmod 755 magiskboot magiskinit magisk64 magisk32
+    buildPhase = ''
+      unzip -oj ${magiskApk} \
+        lib/arm64-v8a/libmagiskinit.so \
+        lib/arm64-v8a/libmagisk64.so \
+        lib/armeabi-v7a/libmagisk32.so \
+        -d .
 
-    ./magiskboot decompress ramdisk.cpio.tmp ramdisk.cpio
-    cp ramdisk.cpio ramdisk.cpio.orig
+      gunzip -c "${stockRamdisk}" > ramdisk.cpio
 
-    echo 'KEEPVERITY=false' > config
-    echo 'KEEPFORCEENCRYPT=true' >> config
+      mkdir rootfs
+      cd rootfs
+      cpio -idm --quiet < ../ramdisk.cpio
 
-    ./magiskboot compress=xz magisk32 magisk32.xz
-    ./magiskboot compress=xz magisk64 magisk64.xz
+      cp init ../init.orig
+      cp ../libmagiskinit.so init
 
-    ./magiskboot cpio ramdisk.cpio \
-      "add 0750 init magiskinit" \
-      "mkdir 0750 overlay.d" \
-      "mkdir 0750 overlay.d/sbin" \
-      "add 0644 overlay.d/sbin/magisk32.xz magisk32.xz" \
-      "add 0644 overlay.d/sbin/magisk64.xz magisk64.xz" \
-      "patch" \
-      "backup ramdisk.cpio.orig" \
-      "mkdir 000 .backup" \
-      "add 000 .backup/.magisk config"
+      mkdir -p overlay.d/sbin
+      xz --check=crc32 -c ../libmagisk32.so > overlay.d/sbin/magisk32.xz
+      xz --check=crc32 -c ../libmagisk64.so > overlay.d/sbin/magisk64.xz
 
-    rm -f ramdisk.cpio.orig config magisk*.xz magiskinit magisk32 magisk64
-    ./magiskboot compress=gzip ramdisk.cpio ramdisk.cpio.gz
-    rm -f ramdisk.cpio ramdisk.cpio.tmp magiskboot
-  '';
+      for f in fstab.*; do
+        [ -f "$f" ] || continue
+        sed -i \
+          -e 's/,verify//g' -e 's/verify,//g' \
+          -e 's/,avb_keys=[^ ]*//g' \
+          -e 's/,avb=[^ ]*//g' -e 's/,avb//g' -e 's/avb,//g' \
+          "$f"
+      done
+
+      mkdir -p .backup
+      cp ../init.orig .backup/init
+      printf 'overlay.d\noverlay.d/sbin\noverlay.d/sbin/magisk32.xz\noverlay.d/sbin/magisk64.xz\n' > .backup/.rmlist
+      printf 'KEEPVERITY=false\nKEEPFORCEENCRYPT=true\n' > .backup/.magisk
+
+      cd ..
+
+      fakeroot bash -c '
+        cd rootfs
+        chown -R 0:0 .
+        chmod 0750 init
+        chmod 0750 overlay.d overlay.d/sbin
+        chmod 0644 overlay.d/sbin/magisk32.xz overlay.d/sbin/magisk64.xz
+        chmod 000 .backup
+        chmod 000 .backup/.magisk
+        find . | sort | cpio -o -H newc --quiet | gzip > ../patched.img
+      '
+    '';
+
+    installPhase = "cp patched.img $out";
+  };
 
   # Mounts the host shared folder via rclone WebDAV + FUSE.
   # The host runs `rclone serve webdav` on loopback; the emulator reaches
@@ -245,66 +270,6 @@
   '';
 
   # ── Host-side scripts (run on macOS, orchestrate via adb) ───────────
-
-  androidRootScript = pkgs.writeShellScript "android-root" ''
-    set -euo pipefail
-
-    RAMDISK_STOCK="$ANDROID_SDK_ROOT/${systemImagePath}ramdisk.img"
-    MAGISK_DIR="${magiskDir}"
-    RAMDISK_PATCHED="${patchedRamdiskPath}"
-
-    if [ -f "$RAMDISK_PATCHED" ]; then
-      echo "Patched ramdisk already exists at: $RAMDISK_PATCHED"
-      echo "Delete it first to re-patch: rm \"$RAMDISK_PATCHED\""
-      exit 1
-    fi
-
-    if [ ! -f "$RAMDISK_STOCK" ]; then
-      echo "Stock ramdisk not found at: $RAMDISK_STOCK"
-      echo "Make sure ANDROID_SDK_ROOT is set and the system image is installed."
-      exit 1
-    fi
-
-    echo "==> Waiting for emulator..."
-    ${adb} wait-for-device
-
-    WORK=$(mktemp -d)
-    trap 'rm -rf "$WORK"' EXIT
-
-    echo "==> Extracting Magisk v25.2 binaries..."
-    unzip -oj ${magiskApk} \
-      'lib/arm64-v8a/libmagiskboot.so' \
-      'lib/arm64-v8a/libmagiskinit.so' \
-      'lib/arm64-v8a/libmagisk64.so' \
-      'lib/armeabi-v7a/libmagisk32.so' \
-      -d "$WORK"
-
-    echo "==> Pushing files to emulator..."
-    ${adb} push "$WORK/libmagiskboot.so" /data/local/tmp/magiskboot
-    ${adb} push "$WORK/libmagiskinit.so" /data/local/tmp/magiskinit
-    ${adb} push "$WORK/libmagisk64.so"   /data/local/tmp/magisk64
-    ${adb} push "$WORK/libmagisk32.so"   /data/local/tmp/magisk32
-    ${adb} push "$RAMDISK_STOCK"         /data/local/tmp/ramdisk.cpio.tmp
-    ${adb} push ${magiskPatchScript}     /data/local/tmp/patch-ramdisk.sh
-
-    echo "==> Patching ramdisk inside emulator..."
-    ${adb} shell sh /data/local/tmp/patch-ramdisk.sh
-
-    echo "==> Pulling patched ramdisk..."
-    mkdir -p "$MAGISK_DIR"
-    ${adb} pull /data/local/tmp/ramdisk.cpio.gz "$RAMDISK_PATCHED"
-
-    echo "==> Cleaning up emulator temp files..."
-    ${adb} shell rm -f /data/local/tmp/ramdisk.cpio.gz /data/local/tmp/patch-ramdisk.sh
-
-    echo "==> Installing Magisk Manager app..."
-    ${adb} install ${magiskApk} || echo "(Magisk app install skipped — install it manually from the APK)"
-
-    echo ""
-    echo "Done! Patched ramdisk saved to: $RAMDISK_PATCHED"
-    echo "Close the emulator and restart with: android-start"
-    echo "Magisk will be active on the next cold boot."
-  '';
 
   androidSharedSetupScript = pkgs.writeShellScript "android-shared-setup" ''
     set -euo pipefail
@@ -360,7 +325,7 @@
 
     if [ ! -f "$PID_FILE" ]; then
       echo "==> Starting WebDAV server on host (127.0.0.1:${webdavPort})..."
-      mkdir -p "${sharedFolderHost}"
+      mkdir -p "${sharedFolderHost}" "${stateDir}"
       rclone serve webdav "${sharedFolderHost}" \
         --addr 127.0.0.1:${webdavPort} \
         --read-only=false \
@@ -412,20 +377,31 @@
     done
 
     echo "==> Disabling Play Store auto-updates..."
-    ${adb} shell "su -c 'am force-stop com.android.vending'"
-    ${adb} shell "su -c 'cmd appops set com.android.vending RUN_IN_BACKGROUND deny'"
+    ${adb} shell am force-stop com.android.vending
+    ${adb} shell cmd appops set com.android.vending RUN_IN_BACKGROUND deny
 
     echo "==> Disabling Play Protect..."
-    ${adb} shell "settings put global package_verifier_enable 0"
-    ${adb} shell "settings put global upload_apk_enable 0"
-    ${adb} shell "settings put global verifier_verify_adb_installs 0"
+    ${adb} shell settings put global package_verifier_enable 0
+    ${adb} shell settings put global upload_apk_enable 0
+    ${adb} shell settings put global verifier_verify_adb_installs 0
 
     echo "==> Disabling virtual keyboard..."
-    ${adb} shell "settings put secure show_ime_with_hard_keyboard 0"
+    ${adb} shell settings put secure show_ime_with_hard_keyboard 0
 
     echo "==> Enabling dark mode..."
-    ${adb} shell "cmd uimode night yes"
-    ${adb} shell "settings put secure ui_night_mode 2"
+    ${adb} shell cmd uimode night yes
+    ${adb} shell settings put secure ui_night_mode 2
+
+    echo "==> Installing Magisk Manager app..."
+    if ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
+      echo "  Magisk Manager already installed."
+    else
+      ${adb} install -r ${magiskApk} 2>/dev/null \
+        && echo "  Magisk Manager installed." \
+        || echo "  (Magisk Manager install failed)"
+      echo "==> Opening Magisk Manager (first install — complete the setup prompt)..."
+      ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
+    fi
 
     echo ""
     echo "Done! All settings applied."
@@ -561,9 +537,7 @@ in {
   home.shellAliases = {
     android-delete = "avdmanager delete avd --name ${avdName}";
     android-create = ''echo "no" | avdmanager create avd --name ${avdName} --package "${systemImagePackage}" --tag "${systemImageTag}" --abi "${systemImageAbi}" --force'';
-    android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags}" + " $([ -f ${patchedRamdiskPath} ] && echo '-ramdisk ${patchedRamdiskPath}') ${qemuFlags}";
-
-    android-root = "${androidRootScript}";
+    android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags}";
     android-configure = "${androidConfigureScript}";
 
     android-shared-setup = "${androidSharedSetupScript}";
