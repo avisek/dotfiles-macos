@@ -402,6 +402,36 @@
     echo "Done."
   '';
 
+  androidConfigureScript = pkgs.writeShellScript "android-configure" ''
+    set -euo pipefail
+
+    echo "==> Waiting for device to finish booting..."
+    ${adb} wait-for-device
+    while [ "$(${adb} shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do
+      sleep 1
+    done
+
+    echo "==> Disabling Play Store auto-updates..."
+    ${adb} shell "su -c 'am force-stop com.android.vending'"
+    ${adb} shell "su -c 'cmd appops set com.android.vending RUN_IN_BACKGROUND deny'"
+
+    echo "==> Disabling Play Protect..."
+    ${adb} shell "settings put global package_verifier_enable 0"
+    ${adb} shell "settings put global upload_apk_enable 0"
+    ${adb} shell "settings put global verifier_verify_adb_installs 0"
+
+    echo "==> Disabling virtual keyboard..."
+    ${adb} shell "settings put secure show_ime_with_hard_keyboard 0"
+
+    echo "==> Enabling dark mode..."
+    ${adb} shell "cmd uimode night yes"
+    ${adb} shell "settings put secure ui_night_mode 2"
+
+    echo ""
+    echo "Done! All settings applied."
+    echo "  (settings put changes persist across reboots)"
+  '';
+
   # ── Emulator configuration ─────────────────────────────────────────
 
   # -qemu must be last: everything after it is passed to QEMU, not the emulator.
@@ -534,6 +564,8 @@ in {
     android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags}" + " $([ -f ${patchedRamdiskPath} ] && echo '-ramdisk ${patchedRamdiskPath}') ${qemuFlags}";
 
     android-root = "${androidRootScript}";
+    android-configure = "${androidConfigureScript}";
+
     android-shared-setup = "${androidSharedSetupScript}";
     android-shared-mount = "${androidSharedMountScript}";
     android-shared-umount = "${androidSharedUmountScript}";
