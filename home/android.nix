@@ -33,7 +33,9 @@
   magiskDir = "${homeDir}/.android/magisk";
   patchedRamdiskPath = "${magiskDir}/ramdisk.img";
 
-  # WebDAV server for shared folder (loopback only, no auth needed)
+  # WebDAV server for shared folder. `adb reverse` tunnels guest :28080 to
+  # host :28080 via ADB's direct transport, bypassing the emulator's slow
+  # SLiRP user-mode network stack.
   webdavPort = "28080";
   webdavPidFile = "${magiskDir}/webdav.pid";
 
@@ -202,7 +204,8 @@
 
   # Mounts the host shared folder via rclone WebDAV + FUSE.
   # The host runs `rclone serve webdav` on loopback; the emulator reaches
-  # it at 10.0.2.2 (the emulator's alias for the host's 127.0.0.1).
+  # it through `adb reverse` (ADB's direct transport channel), bypassing
+  # the emulator's slow SLiRP user-mode network stack (~6x faster).
   sharedMountScript = pkgs.writeText "mount-shared.sh" ''
     #!/system/bin/sh
     export PATH=/data/local/tmp:$PATH
@@ -216,7 +219,7 @@
 
     /data/local/tmp/rclone mount \
       ":webdav:/" "$MOUNT" \
-      --webdav-url http://10.0.2.2:${webdavPort} \
+      --webdav-url http://127.0.0.1:${webdavPort} \
       --vfs-cache-mode writes \
       --cache-dir /data/local/tmp/rclone-cache \
       --no-modtime \
@@ -366,6 +369,9 @@
       echo "  WebDAV server started (pid $(cat "$PID_FILE"))."
     fi
 
+    echo "==> Setting up ADB reverse tunnel (guest :${webdavPort} -> host :${webdavPort})..."
+    adb reverse tcp:${webdavPort} tcp:${webdavPort}
+
     echo "==> Mounting inside emulator at ${sharedFolderGuest}..."
     adb shell "su -c 'sh /data/local/tmp/mount-shared.sh'"
     echo "Mounted. Files are accessible at ${sharedFolderGuest} inside the emulator."
@@ -377,6 +383,9 @@
     echo "==> Unmounting ${sharedFolderGuest} in emulator..."
     adb shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" \
       || echo "  (was not mounted)"
+
+    echo "==> Removing ADB reverse tunnel..."
+    adb reverse --remove tcp:${webdavPort} 2>/dev/null || true
 
     PID_FILE="${webdavPidFile}"
     if [ -f "$PID_FILE" ]; then
