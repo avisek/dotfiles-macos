@@ -431,7 +431,7 @@
     hw.arc=no
     hw.arc.autologin=no
     hw.audioInput=no
-    hw.audioOutput=no
+    hw.audioOutput=yes
     hw.battery=no
     hw.camera.back=none
     hw.camera.front=none
