@@ -405,6 +405,7 @@
     "-gpu host"
     "-no-metrics"
     "-no-location-ui"
+    "-feature -Vulkan"
   ];
   qemuFlags = "-qemu -append androidboot.serialconsole=0";
 
