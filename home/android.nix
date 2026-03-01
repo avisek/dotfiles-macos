@@ -33,6 +33,12 @@
   magiskDir = "${homeDir}/.android/magisk";
   patchedRamdiskPath = "${magiskDir}/ramdisk.img";
 
+  # Pin the emulator console port so its ADB serial is deterministic,
+  # allowing all adb commands to target it even with other devices connected.
+  emulatorPort = "5554";
+  adbSerial = "emulator-${emulatorPort}";
+  adb = "adb -s ${adbSerial}";
+
   # WebDAV server for shared folder. `adb reverse` tunnels guest :28080 to
   # host :28080 via ADB's direct transport, bypassing the emulator's slow
   # SLiRP user-mode network stack.
@@ -260,7 +266,7 @@
     fi
 
     echo "==> Waiting for emulator..."
-    adb wait-for-device
+    ${adb} wait-for-device
 
     WORK=$(mktemp -d)
     trap 'rm -rf "$WORK"' EXIT
@@ -274,25 +280,25 @@
       -d "$WORK"
 
     echo "==> Pushing files to emulator..."
-    adb push "$WORK/libmagiskboot.so" /data/local/tmp/magiskboot
-    adb push "$WORK/libmagiskinit.so" /data/local/tmp/magiskinit
-    adb push "$WORK/libmagisk64.so"   /data/local/tmp/magisk64
-    adb push "$WORK/libmagisk32.so"   /data/local/tmp/magisk32
-    adb push "$RAMDISK_STOCK"         /data/local/tmp/ramdisk.cpio.tmp
-    adb push ${magiskPatchScript}     /data/local/tmp/patch-ramdisk.sh
+    ${adb} push "$WORK/libmagiskboot.so" /data/local/tmp/magiskboot
+    ${adb} push "$WORK/libmagiskinit.so" /data/local/tmp/magiskinit
+    ${adb} push "$WORK/libmagisk64.so"   /data/local/tmp/magisk64
+    ${adb} push "$WORK/libmagisk32.so"   /data/local/tmp/magisk32
+    ${adb} push "$RAMDISK_STOCK"         /data/local/tmp/ramdisk.cpio.tmp
+    ${adb} push ${magiskPatchScript}     /data/local/tmp/patch-ramdisk.sh
 
     echo "==> Patching ramdisk inside emulator..."
-    adb shell sh /data/local/tmp/patch-ramdisk.sh
+    ${adb} shell sh /data/local/tmp/patch-ramdisk.sh
 
     echo "==> Pulling patched ramdisk..."
     mkdir -p "$MAGISK_DIR"
-    adb pull /data/local/tmp/ramdisk.cpio.gz "$RAMDISK_PATCHED"
+    ${adb} pull /data/local/tmp/ramdisk.cpio.gz "$RAMDISK_PATCHED"
 
     echo "==> Cleaning up emulator temp files..."
-    adb shell rm -f /data/local/tmp/ramdisk.cpio.gz /data/local/tmp/patch-ramdisk.sh
+    ${adb} shell rm -f /data/local/tmp/ramdisk.cpio.gz /data/local/tmp/patch-ramdisk.sh
 
     echo "==> Installing Magisk Manager app..."
-    adb install ${magiskApk} || echo "(Magisk app install skipped — install it manually from the APK)"
+    ${adb} install ${magiskApk} || echo "(Magisk app install skipped — install it manually from the APK)"
 
     echo ""
     echo "Done! Patched ramdisk saved to: $RAMDISK_PATCHED"
@@ -307,22 +313,22 @@
     mkdir -p "${sharedFolderHost}"
 
     echo "==> Waiting for emulator..."
-    adb wait-for-device
+    ${adb} wait-for-device
 
     echo "==> Pushing rclone binary to emulator..."
-    adb push ${rcloneAndroid}/rclone /data/local/tmp/rclone
-    adb shell "su -c 'chmod 755 /data/local/tmp/rclone'"
+    ${adb} push ${rcloneAndroid}/rclone /data/local/tmp/rclone
+    ${adb} shell "su -c 'chmod 755 /data/local/tmp/rclone'"
 
     echo "==> Pushing fusermount3 to emulator..."
-    adb push ${fusermountAndroid}/bin/fusermount3 /data/local/tmp/fusermount3
-    adb shell "su -c 'chmod 755 /data/local/tmp/fusermount3'"
+    ${adb} push ${fusermountAndroid}/bin/fusermount3 /data/local/tmp/fusermount3
+    ${adb} shell "su -c 'chmod 755 /data/local/tmp/fusermount3'"
 
     echo "==> Pushing mount script to emulator..."
-    adb push ${sharedMountScript} /data/local/tmp/mount-shared.sh
-    adb shell "su -c 'chmod 755 /data/local/tmp/mount-shared.sh'"
+    ${adb} push ${sharedMountScript} /data/local/tmp/mount-shared.sh
+    ${adb} shell "su -c 'chmod 755 /data/local/tmp/mount-shared.sh'"
 
     echo "==> Creating mount point in emulator..."
-    adb shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
+    ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
 
     echo ""
     echo "Setup complete!"
@@ -370,10 +376,10 @@
     fi
 
     echo "==> Setting up ADB reverse tunnel (guest :${webdavPort} -> host :${webdavPort})..."
-    adb reverse tcp:${webdavPort} tcp:${webdavPort}
+    ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
 
     echo "==> Mounting inside emulator at ${sharedFolderGuest}..."
-    adb shell "su -c 'sh /data/local/tmp/mount-shared.sh'"
+    ${adb} shell "su -c 'sh /data/local/tmp/mount-shared.sh'"
     echo "Mounted. Files are accessible at ${sharedFolderGuest} inside the emulator."
   '';
 
@@ -381,11 +387,11 @@
     set -euo pipefail
 
     echo "==> Unmounting ${sharedFolderGuest} in emulator..."
-    adb shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" \
+    ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" \
       || echo "  (was not mounted)"
 
     echo "==> Removing ADB reverse tunnel..."
-    adb reverse --remove tcp:${webdavPort} 2>/dev/null || true
+    ${adb} reverse --remove tcp:${webdavPort} 2>/dev/null || true
 
     PID_FILE="${webdavPidFile}"
     if [ -f "$PID_FILE" ]; then
@@ -406,6 +412,7 @@
     "-no-metrics"
     "-no-location-ui"
     "-feature -Vulkan"
+    "-port ${emulatorPort}"
   ];
   qemuFlags = "-qemu -append androidboot.serialconsole=0";
 
