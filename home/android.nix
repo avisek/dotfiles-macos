@@ -9,8 +9,8 @@
   systemImageAbi = "arm64-v8a";
   systemImageTag = "google_apis_playstore";
 
-  lcdWidth = 2560;
-  lcdHeight = 1440;
+  lcdWidth = 720;
+  lcdHeight = 1280;
   lcdDensity = 320;
 
   systemImageTagPkg = builtins.replaceStrings ["_"] ["-"] systemImageTag;
