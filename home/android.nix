@@ -434,8 +434,8 @@
     mkdir -p "${sharedFolderHost}"
     rclone serve webdav "${sharedFolderHost}" \
       --addr 127.0.0.1:${webdavPort} \
-      --read-only=false \
-      --dir-cache-time 0 &
+      --dir-cache-time 0 \
+      --config="" &
     WEBDAV_PID=$!
     sleep 1
     if ! kill -0 "$WEBDAV_PID" 2>/dev/null; then
@@ -447,7 +447,18 @@
     ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
     ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
     ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
-    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --dir-cache-time 0 --log-file /data/local/tmp/rclone-mount.log </dev/null >/dev/null 2>&1 &'"
+    ${adb} shell "su -c '
+      PATH=/data/local/tmp \
+      /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} \
+        --webdav-url http://127.0.0.1:${webdavPort} \
+        --vfs-cache-mode writes \
+        --cache-dir /data/local/tmp/rclone-cache \
+        --dir-cache-time 0 \
+        --allow-other \
+        --config=\"\" \
+        --log-file /data/local/tmp/rclone-mount.log \
+        </dev/null >/dev/null 2>&1 &
+    '"
 
     MOUNT_OK=false
     for _ in $(seq 15); do
