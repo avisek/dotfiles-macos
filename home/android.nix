@@ -253,7 +253,6 @@
       --webdav-url http://127.0.0.1:${webdavPort} \
       --vfs-cache-mode writes \
       --cache-dir /data/local/tmp/rclone-cache \
-      --no-modtime \
       --allow-other \
       --allow-non-empty \
       --dir-cache-time 0 \
