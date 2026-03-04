@@ -19,7 +19,6 @@
   avdPath = "${config.home.homeDirectory}/.android/avd/${avdName}.avd";
 
   homeDir = config.home.homeDirectory;
-  username = config.home.username;
 
   # Shared folder: ~/android-shared on host <-> /sdcard/shared in emulator
   sharedFolderHost = "${homeDir}/android-shared";
@@ -28,9 +27,6 @@
   # all sdcardfs views (/storage/emulated, /mnt/runtime/{read,write,full}/…),
   # making it visible to apps, not just adb shell.
   sharedFolderGuestMount = "/mnt/runtime/default/emulated/0/shared";
-
-  # Runtime state directory (PID files, etc.)
-  stateDir = "${homeDir}/.android/magisk";
 
   # Pin the emulator console port so its ADB serial is deterministic,
   # allowing all adb commands to target it even with other devices connected.
@@ -42,7 +38,6 @@
   # host :28080 via ADB's direct transport, bypassing the emulator's slow
   # SLiRP user-mode network stack.
   webdavPort = "28080";
-  webdavPidFile = "${stateDir}/webdav.pid";
 
   # ── Pinned dependencies ─────────────────────────────────────────────
 
@@ -233,180 +228,6 @@
     installPhase = "cp patched.img $out";
   };
 
-  # Mounts the host shared folder via rclone WebDAV + FUSE.
-  # The host runs `rclone serve webdav` on loopback; the emulator reaches
-  # it through `adb reverse` (ADB's direct transport channel), bypassing
-  # the emulator's slow SLiRP user-mode network stack (~6x faster).
-  sharedMountScript = pkgs.writeText "mount-shared.sh" ''
-    #!/system/bin/sh
-    export PATH=/data/local/tmp:$PATH
-    MOUNT=${sharedFolderGuestMount}
-
-    # Kill any leftover rclone mount from a previous session
-    pkill -f "rclone mount" 2>/dev/null || true
-    umount "$MOUNT" 2>/dev/null || true
-    sleep 0.5
-    mkdir -p "$MOUNT"
-
-    /data/local/tmp/rclone mount \
-      ":webdav:/" "$MOUNT" \
-      --webdav-url http://127.0.0.1:${webdavPort} \
-      --vfs-cache-mode writes \
-      --cache-dir /data/local/tmp/rclone-cache \
-      --allow-other \
-      --allow-non-empty \
-      --dir-cache-time 0 \
-      </dev/null >/dev/null 2>&1 &
-
-    i=0
-    while [ $i -lt 50 ]; do
-      mount | grep -q "$MOUNT" && exit 0
-      sleep 0.2
-      i=$((i + 1))
-    done
-    echo "Error: FUSE mount did not establish" >&2
-    exit 1
-  '';
-
-  # ── Host-side scripts (run on macOS, orchestrate via adb) ───────────
-
-  androidSharedSetupScript = pkgs.writeShellScript "android-shared-setup" ''
-    set -euo pipefail
-
-    echo "==> Creating shared folder on host..."
-    mkdir -p "${sharedFolderHost}"
-
-    echo "==> Waiting for emulator..."
-    ${adb} wait-for-device
-
-    echo "==> Pushing rclone binary to emulator..."
-    ${adb} push ${rcloneAndroid}/rclone /data/local/tmp/rclone
-    ${adb} shell "su -c 'chmod 755 /data/local/tmp/rclone'"
-
-    echo "==> Pushing fusermount3 to emulator..."
-    ${adb} push ${fusermountAndroid}/bin/fusermount3 /data/local/tmp/fusermount3
-    ${adb} shell "su -c 'chmod 755 /data/local/tmp/fusermount3'"
-
-    echo "==> Pushing mount script to emulator..."
-    ${adb} push ${sharedMountScript} /data/local/tmp/mount-shared.sh
-    ${adb} shell "su -c 'chmod 755 /data/local/tmp/mount-shared.sh'"
-
-    echo "==> Creating mount point in emulator..."
-    ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
-
-    echo ""
-    echo "Setup complete!"
-    echo "  Host folder:    ${sharedFolderHost}"
-    echo "  Emulator mount: ${sharedFolderGuest}"
-    echo ""
-    echo "Use 'android-shared-mount' to mount the shared folder."
-  '';
-
-  androidSharedMountScript = pkgs.writeShellScript "android-shared-mount" ''
-    set -euo pipefail
-
-    PID_FILE="${webdavPidFile}"
-
-    # Kill stale server if PID file exists but process is dead or not rclone
-    if [ -f "$PID_FILE" ]; then
-      OLD_PID=$(cat "$PID_FILE")
-      if kill -0 "$OLD_PID" 2>/dev/null; then
-        if ps -p "$OLD_PID" -o command= 2>/dev/null | grep -q "rclone serve"; then
-          echo "WebDAV server already running (pid $OLD_PID)."
-        else
-          echo "Stale PID $OLD_PID (not rclone). Cleaning up."
-          rm -f "$PID_FILE"
-        fi
-      else
-        rm -f "$PID_FILE"
-      fi
-    fi
-
-    if [ ! -f "$PID_FILE" ]; then
-      echo "==> Starting WebDAV server on host (127.0.0.1:${webdavPort})..."
-      mkdir -p "${sharedFolderHost}" "${stateDir}"
-      rclone serve webdav "${sharedFolderHost}" \
-        --addr 127.0.0.1:${webdavPort} \
-        --read-only=false \
-        --dir-cache-time 0 &
-      echo $! > "$PID_FILE"
-      sleep 1
-      if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-        echo "Error: WebDAV server failed to start."
-        rm -f "$PID_FILE"
-        exit 1
-      fi
-      echo "  WebDAV server started (pid $(cat "$PID_FILE"))."
-    fi
-
-    echo "==> Setting up ADB reverse tunnel (guest :${webdavPort} -> host :${webdavPort})..."
-    ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
-
-    echo "==> Mounting inside emulator at ${sharedFolderGuest}..."
-    ${adb} shell "su -c 'sh /data/local/tmp/mount-shared.sh'"
-    echo "Mounted. Files are accessible at ${sharedFolderGuest} inside the emulator."
-  '';
-
-  androidSharedUmountScript = pkgs.writeShellScript "android-shared-umount" ''
-    set -euo pipefail
-
-    echo "==> Unmounting ${sharedFolderGuest} in emulator..."
-    ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" \
-      || echo "  (was not mounted)"
-
-    echo "==> Removing ADB reverse tunnel..."
-    ${adb} reverse --remove tcp:${webdavPort} 2>/dev/null || true
-
-    PID_FILE="${webdavPidFile}"
-    if [ -f "$PID_FILE" ]; then
-      echo "==> Stopping WebDAV server on host..."
-      kill "$(cat "$PID_FILE")" 2>/dev/null || true
-      rm -f "$PID_FILE"
-    fi
-    echo "Done."
-  '';
-
-  androidConfigureScript = pkgs.writeShellScript "android-configure" ''
-    set -euo pipefail
-
-    echo "==> Waiting for device to finish booting..."
-    ${adb} wait-for-device
-    while [ "$(${adb} shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do
-      sleep 1
-    done
-
-    echo "==> Disabling Play Store auto-updates..."
-    ${adb} shell am force-stop com.android.vending
-    ${adb} shell cmd appops set com.android.vending RUN_IN_BACKGROUND deny
-
-    echo "==> Disabling Play Protect..."
-    ${adb} shell settings put global package_verifier_enable 0
-    ${adb} shell settings put global upload_apk_enable 0
-    ${adb} shell settings put global verifier_verify_adb_installs 0
-
-    echo "==> Disabling virtual keyboard..."
-    ${adb} shell settings put secure show_ime_with_hard_keyboard 0
-
-    echo "==> Enabling dark mode..."
-    ${adb} shell cmd uimode night yes
-    ${adb} shell settings put secure ui_night_mode 2
-
-    echo "==> Installing Magisk Manager app..."
-    if ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
-      echo "  Magisk Manager already installed."
-    else
-      ${adb} install -r ${magiskApk} 2>/dev/null \
-        && echo "  Magisk Manager installed." \
-        || echo "  (Magisk Manager install failed)"
-      echo "==> Opening Magisk Manager (first install — complete the setup prompt)..."
-      ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
-    fi
-
-    echo ""
-    echo "Done! All settings applied."
-    echo "  (settings put changes persist across reboots)"
-  '';
-
   # ── Emulator configuration ─────────────────────────────────────────
 
   # -qemu must be last: everything after it is passed to QEMU, not the emulator.
@@ -518,8 +339,127 @@
     userdata.useQcow2=no
     vm.heapSize=512M
   '';
+
+  # ── Launcher script ────────────────────────────────────────────────
+
+  androidScript = pkgs.writeShellScriptBin "android" ''
+    set -euo pipefail
+
+    case "''${1:-}" in
+      --delete|-d)
+        avdmanager delete avd --name ${avdName}
+        echo "AVD '${avdName}' deleted."
+        exit 0
+        ;;
+      "")
+        ;;
+      *)
+        echo "Usage: android [--delete|-d]" >&2
+        exit 1
+        ;;
+    esac
+
+    # ── Create AVD if needed ────────────────────────────────────────
+    if [ ! -d "${avdPath}" ]; then
+      echo "==> Creating AVD '${avdName}'..."
+      echo "no" | avdmanager create avd \
+        --name ${avdName} \
+        --package "${systemImagePackage}" \
+        --tag "${systemImageTag}" \
+        --abi "${systemImageAbi}" \
+        --force
+    fi
+    cp -f ${avdConfig} ${avdPath}/config.ini
+
+    # ── Subprocess management ───────────────────────────────────────
+    EMU_PID=""
+    WEBDAV_PID=""
+    cleanup() {
+      echo ""
+      echo "==> Shutting down..."
+      ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null'" 2>/dev/null || true
+      ${adb} shell "su -c 'umount ${sharedFolderGuestMount} 2>/dev/null'" 2>/dev/null || true
+      ${adb} reverse --remove tcp:${webdavPort} 2>/dev/null || true
+      [ -n "$WEBDAV_PID" ] && kill "$WEBDAV_PID" 2>/dev/null || true
+      [ -n "$EMU_PID" ] && kill "$EMU_PID" 2>/dev/null || true
+      wait 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT TERM
+
+    # ── Start emulator (subprocess 1) ───────────────────────────────
+    echo "==> Starting emulator..."
+    emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} &
+    EMU_PID=$!
+
+    # ── Wait for boot ───────────────────────────────────────────────
+    echo "==> Waiting for boot..."
+    ${adb} wait-for-device
+    while [ "$(${adb} shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do
+      sleep 1
+    done
+
+    # ── Configure ───────────────────────────────────────────────────
+    echo "==> Configuring..."
+    ${adb} shell am force-stop com.android.vending
+    ${adb} shell cmd appops set com.android.vending RUN_IN_BACKGROUND deny
+    ${adb} shell settings put global package_verifier_enable 0
+    ${adb} shell settings put global upload_apk_enable 0
+    ${adb} shell settings put global verifier_verify_adb_installs 0
+    ${adb} shell settings put secure show_ime_with_hard_keyboard 0
+    ${adb} shell cmd uimode night yes
+    ${adb} shell settings put secure ui_night_mode 2
+
+    if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
+      ${adb} install -r ${magiskApk} 2>/dev/null \
+        && echo "  Magisk installed." \
+        || echo "  (Magisk install failed)"
+      ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
+    fi
+
+    # ── Push shared-folder binaries (skip if present) ───────────────
+    if ! ${adb} shell "[ -x /data/local/tmp/rclone ]" 2>/dev/null; then
+      echo "==> Pushing rclone to emulator..."
+      ${adb} push ${rcloneAndroid}/rclone /data/local/tmp/rclone
+      ${adb} shell "su -c 'chmod 755 /data/local/tmp/rclone'"
+    fi
+    if ! ${adb} shell "[ -x /data/local/tmp/fusermount3 ]" 2>/dev/null; then
+      echo "==> Pushing fusermount3 to emulator..."
+      ${adb} push ${fusermountAndroid}/bin/fusermount3 /data/local/tmp/fusermount3
+      ${adb} shell "su -c 'chmod 755 /data/local/tmp/fusermount3'"
+    fi
+
+    # ── Mount shared folder ─────────────────────────────────────────
+    echo "==> Mounting shared folder..."
+    mkdir -p "${sharedFolderHost}"
+    rclone serve webdav "${sharedFolderHost}" \
+      --addr 127.0.0.1:${webdavPort} \
+      --read-only=false \
+      --dir-cache-time 0 &
+    WEBDAV_PID=$!
+    sleep 1
+    if ! kill -0 "$WEBDAV_PID" 2>/dev/null; then
+      echo "Error: WebDAV server failed to start." >&2
+      exit 1
+    fi
+
+    ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
+    ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
+    ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
+    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --allow-non-empty --dir-cache-time 0 --daemon --log-file /data/local/tmp/rclone-mount.log'" \
+      || echo "Warning: shared folder mount failed (check: adb shell cat /data/local/tmp/rclone-mount.log)" >&2
+
+    echo ""
+    echo "Ready!"
+    echo "  Host folder: ${sharedFolderHost}"
+    echo "  Emulator:    ${sharedFolderGuest}"
+    echo "  Mount log:   adb shell cat /data/local/tmp/rclone-mount.log"
+    echo ""
+
+    wait $EMU_PID
+  '';
 in {
-  home.packages = [pkgs.rclone];
+  home.packages = [pkgs.rclone androidScript];
 
   android-sdk = {
     enable = true;
@@ -531,17 +471,6 @@ in {
       sdkPkgs."platforms-android-${androidApi}"
       sdkPkgs."system-images-android-${androidApi}-${systemImageTagPkg}-${systemImageAbi}"
     ];
-  };
-
-  home.shellAliases = {
-    android-delete = "avdmanager delete avd --name ${avdName}";
-    android-create = ''echo "no" | avdmanager create avd --name ${avdName} --package "${systemImagePackage}" --tag "${systemImageTag}" --abi "${systemImageAbi}" --force'';
-    android-start = "cp -f ${avdConfig} ${avdPath}/config.ini && emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags}";
-    android-configure = "${androidConfigureScript}";
-
-    android-shared-setup = "${androidSharedSetupScript}";
-    android-shared-mount = "${androidSharedMountScript}";
-    android-shared-umount = "${androidSharedUmountScript}";
   };
 
   targets.darwin.defaults = {
