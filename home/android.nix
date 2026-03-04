@@ -446,14 +446,28 @@
     ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
     ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
     ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
-    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --dir-cache-time 0 --daemon --log-file /data/local/tmp/rclone-mount.log'" \
-      || echo "Warning: shared folder mount failed (check: adb shell cat /data/local/tmp/rclone-mount.log)" >&2
+    ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
+    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --dir-cache-time 0 --log-file /data/local/tmp/rclone-mount.log </dev/null >/dev/null 2>&1 &'"
+
+    MOUNT_OK=false
+    for _ in $(seq 15); do
+      if ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}"; then
+        MOUNT_OK=true
+        break
+      fi
+      sleep 0.2
+    done
 
     echo ""
-    echo "Ready!"
-    echo "  Host folder: ${sharedFolderHost}"
-    echo "  Emulator:    ${sharedFolderGuest}"
-    echo "  Mount log:   adb shell cat /data/local/tmp/rclone-mount.log"
+    if $MOUNT_OK; then
+      echo "Shared folder mounted."
+      echo "  Host:  ${sharedFolderHost}"
+      echo "  Guest: ${sharedFolderGuest}"
+      echo "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'"
+    else
+      echo "Warning: shared folder mount failed." >&2
+      echo "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
+    fi
     echo ""
 
     wait $EMU_PID
