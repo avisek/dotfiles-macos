@@ -446,7 +446,7 @@
     ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
     ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
     ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
-    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --allow-non-empty --dir-cache-time 0 --daemon --log-file /data/local/tmp/rclone-mount.log'" \
+    ${adb} shell "su -c 'PATH=/data/local/tmp /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} --webdav-url http://127.0.0.1:${webdavPort} --vfs-cache-mode writes --cache-dir /data/local/tmp/rclone-cache --allow-other --dir-cache-time 0 --daemon --log-file /data/local/tmp/rclone-mount.log'" \
       || echo "Warning: shared folder mount failed (check: adb shell cat /data/local/tmp/rclone-mount.log)" >&2
 
     echo ""
