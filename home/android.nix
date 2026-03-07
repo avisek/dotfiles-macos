@@ -376,9 +376,11 @@
     # ── Subprocess management ───────────────────────────────────────
     EMU_PID=""
     WEBDAV_PID=""
+    WATCHER_PID=""
     cleanup() {
       log ""
       log "==> Shutting down..."
+      [ -n "$WATCHER_PID" ] && kill "$WATCHER_PID" 2>/dev/null || true
       ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null'" 2>/dev/null || true
       ${adb} shell "su -c 'umount ${sharedFolderGuestMount} 2>/dev/null'" 2>/dev/null || true
       ${adb} reverse --remove tcp:${webdavPort} 2>/dev/null || true
@@ -432,6 +434,30 @@
     fi
 
     # ── Mount shared folder ─────────────────────────────────────────
+    mount_shared() {
+      ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
+      ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
+      ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
+      ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
+      ${adb} shell "su -c '
+        PATH=/data/local/tmp \
+        /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} \
+          --webdav-url http://127.0.0.1:${webdavPort} \
+          --vfs-cache-mode writes \
+          --cache-dir /data/local/tmp/rclone-cache \
+          --dir-cache-time 0 \
+          --allow-other \
+          --config=\"\" \
+          --log-file /data/local/tmp/rclone-mount.log \
+          </dev/null >/dev/null 2>&1 &
+      '"
+      for _ in $(seq 15); do
+        ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}" && return 0
+        sleep 0.2
+      done
+      return 1
+    }
+
     log "==> Mounting shared folder..."
     mkdir -p "${sharedFolderHost}"
     rclone serve webdav "${sharedFolderHost}" \
@@ -445,34 +471,8 @@
       exit 1
     fi
 
-    ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
-    ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
-    ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
-    ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
-    ${adb} shell "su -c '
-      PATH=/data/local/tmp \
-      /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} \
-        --webdav-url http://127.0.0.1:${webdavPort} \
-        --vfs-cache-mode writes \
-        --cache-dir /data/local/tmp/rclone-cache \
-        --dir-cache-time 0 \
-        --allow-other \
-        --config=\"\" \
-        --log-file /data/local/tmp/rclone-mount.log \
-        </dev/null >/dev/null 2>&1 &
-    '"
-
-    MOUNT_OK=false
-    for _ in $(seq 15); do
-      if ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}"; then
-        MOUNT_OK=true
-        break
-      fi
-      sleep 0.2
-    done
-
     log ""
-    if $MOUNT_OK; then
+    if mount_shared; then
       log "Shared folder mounted."
       log "  Host:  ${sharedFolderHost}"
       log "  Guest: ${sharedFolderGuest}"
@@ -482,6 +482,22 @@
       log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
     fi
     log ""
+
+    # ── Watch for guest reboots and re-mount ──────────────────────
+    (
+      while kill -0 "$EMU_PID" 2>/dev/null; do
+        sleep 3
+        ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}" && continue
+        [ "$(${adb} shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || continue
+        log "==> Re-mounting shared folder (device rebooted)..."
+        if mount_shared; then
+          log "Shared folder re-mounted."
+        else
+          log "Warning: shared folder re-mount failed." >&2
+        fi
+      done
+    ) &
+    WATCHER_PID=$!
 
     wait $EMU_PID
   '';
