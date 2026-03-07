@@ -345,23 +345,25 @@
   androidScript = pkgs.writeShellScriptBin "android" ''
     set -euo pipefail
 
+    log() { printf '\033[0m%s\n' "$*"; }
+
     case "''${1:-}" in
       --delete|-d)
         avdmanager delete avd --name ${avdName}
-        echo "AVD '${avdName}' deleted."
+        log "AVD '${avdName}' deleted."
         exit 0
         ;;
       "")
         ;;
       *)
-        echo "Usage: android [--delete|-d]" >&2
+        log "Usage: android [--delete|-d]" >&2
         exit 1
         ;;
     esac
 
     # ── Create AVD if needed ────────────────────────────────────────
     if [ ! -d "${avdPath}" ]; then
-      echo "==> Creating AVD '${avdName}'..."
+      log "==> Creating AVD '${avdName}'..."
       echo "no" | avdmanager create avd \
         --name ${avdName} \
         --package "${systemImagePackage}" \
@@ -375,8 +377,8 @@
     EMU_PID=""
     WEBDAV_PID=""
     cleanup() {
-      echo ""
-      echo "==> Shutting down..."
+      log ""
+      log "==> Shutting down..."
       ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null'" 2>/dev/null || true
       ${adb} shell "su -c 'umount ${sharedFolderGuestMount} 2>/dev/null'" 2>/dev/null || true
       ${adb} reverse --remove tcp:${webdavPort} 2>/dev/null || true
@@ -388,19 +390,19 @@
     trap 'exit 130' INT TERM
 
     # ── Start emulator (subprocess 1) ───────────────────────────────
-    echo "==> Starting emulator..."
-    emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} &
+    log "==> Starting emulator..."
+    emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} > >(sed 's/^/[emulator] /') 2>&1 &
     EMU_PID=$!
 
     # ── Wait for boot ───────────────────────────────────────────────
-    echo "==> Waiting for boot..."
+    log "==> Waiting for boot..."
     ${adb} wait-for-device
     while [ "$(${adb} shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; do
       sleep 1
     done
 
     # ── Configure ───────────────────────────────────────────────────
-    echo "==> Configuring..."
+    log "==> Configuring..."
     ${adb} shell am force-stop com.android.vending
     ${adb} shell cmd appops set com.android.vending RUN_IN_BACKGROUND deny
     ${adb} shell settings put global package_verifier_enable 0
@@ -412,34 +414,34 @@
 
     if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
       ${adb} install -r ${magiskApk} 2>/dev/null \
-        && echo "  Magisk installed." \
-        || echo "  (Magisk install failed)"
+        && log "  Magisk installed." \
+        || log "  (Magisk install failed)"
       ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
     fi
 
     # ── Push shared-folder binaries (skip if present) ───────────────
     if ! ${adb} shell "[ -x /data/local/tmp/rclone ]" 2>/dev/null; then
-      echo "==> Pushing rclone to emulator..."
+      log "==> Pushing rclone to emulator..."
       ${adb} push ${rcloneAndroid}/rclone /data/local/tmp/rclone
       ${adb} shell "su -c 'chmod 755 /data/local/tmp/rclone'"
     fi
     if ! ${adb} shell "[ -x /data/local/tmp/fusermount3 ]" 2>/dev/null; then
-      echo "==> Pushing fusermount3 to emulator..."
+      log "==> Pushing fusermount3 to emulator..."
       ${adb} push ${fusermountAndroid}/bin/fusermount3 /data/local/tmp/fusermount3
       ${adb} shell "su -c 'chmod 755 /data/local/tmp/fusermount3'"
     fi
 
     # ── Mount shared folder ─────────────────────────────────────────
-    echo "==> Mounting shared folder..."
+    log "==> Mounting shared folder..."
     mkdir -p "${sharedFolderHost}"
     rclone serve webdav "${sharedFolderHost}" \
       --addr 127.0.0.1:${webdavPort} \
       --dir-cache-time 0 \
-      --config="" &
+      --config="" > >(sed 's/^/[webdav] /') 2>&1 &
     WEBDAV_PID=$!
     sleep 1
     if ! kill -0 "$WEBDAV_PID" 2>/dev/null; then
-      echo "Error: WebDAV server failed to start." >&2
+      log "Error: WebDAV server failed to start." >&2
       exit 1
     fi
 
@@ -469,17 +471,17 @@
       sleep 0.2
     done
 
-    echo ""
+    log ""
     if $MOUNT_OK; then
-      echo "Shared folder mounted."
-      echo "  Host:  ${sharedFolderHost}"
-      echo "  Guest: ${sharedFolderGuest}"
-      echo "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'"
+      log "Shared folder mounted."
+      log "  Host:  ${sharedFolderHost}"
+      log "  Guest: ${sharedFolderGuest}"
+      log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'"
     else
-      echo "Warning: shared folder mount failed." >&2
-      echo "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
+      log "Warning: shared folder mount failed." >&2
+      log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
     fi
-    echo ""
+    log ""
 
     wait $EMU_PID
   '';
