@@ -445,7 +445,7 @@
           --webdav-url http://127.0.0.1:${webdavPort} \
           --vfs-cache-mode writes \
           --cache-dir /data/local/tmp/rclone-cache \
-          --dir-cache-time 0 \
+          --dir-cache-time 3s \
           --allow-other \
           --config=\"\" \
           --log-file /data/local/tmp/rclone-mount.log \
@@ -462,7 +462,7 @@
     mkdir -p "${sharedFolderHost}"
     rclone serve webdav "${sharedFolderHost}" \
       --addr 127.0.0.1:${webdavPort} \
-      --dir-cache-time 0 \
+      --dir-cache-time 3s \
       --config="" > >(sed 's/^/[webdav] /') 2>&1 &
     WEBDAV_PID=$!
     sleep 1
