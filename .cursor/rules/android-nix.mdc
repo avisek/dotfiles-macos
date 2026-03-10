@@ -1,0 +1,123 @@
+---
+description: Architecture and implementation context for the declarative Android emulator module
+globs: home/android.nix
+alwaysApply: false
+---
+
+# android.nix — Declarative Android Emulator with Magisk Root & Shared Folders
+
+Home-manager module (`home/android.nix`) that provides a single `android` command to launch a fully configured Android emulator with Magisk root access and a FUSE-mounted shared folder between host and guest.
+
+## Target
+
+- Android 10 (API 29), arm64-v8a, `google_apis_playstore` system image
+- macOS host (Apple Silicon / aarch64-darwin) via nix-darwin + home-manager
+- Android SDK provided by `android-nixpkgs` flake input (`tadfisher/android-nixpkgs`)
+
+## CLI
+
+```
+android          # create AVD if needed, boot, configure, mount shared folder
+android --delete # delete the AVD (shorthand: -d)
+```
+
+## Architecture
+
+```
+Host (macOS)                          Guest (Android Emulator)
+─────────────────────────────────────────────────────────────────
+rclone serve webdav                   rclone mount (FUSE)
+  ~/android-shared                      /mnt/runtime/default/emulated/0/shared
+  127.0.0.1:28080  <── adb reverse ──>  127.0.0.1:28080
+```
+
+### Why this design
+
+- The stock emulator kernel (goldfish/ranchu) has NO 9P/NFS/CIFS modules, but DOES have FUSE.
+- WebDAV over `adb reverse` bypasses the emulator's slow SLiRP user-mode network stack (~6x faster than going through 10.0.2.2).
+- `adb reverse` tunnels the guest's localhost:28080 directly to the host's localhost:28080 via ADB's transport channel.
+
+### FUSE mount point
+
+Mount at `/mnt/runtime/default/emulated/0/shared` (not `/sdcard/shared`) so sdcardfs propagation (`shared:N`) exposes the FUSE mount through all views (`/storage/emulated`, `/mnt/runtime/{read,write,full}/...`), making files visible to apps, not just `adb shell`.
+
+## Magisk Root — Build-time Ramdisk Patching
+
+The `patchedRamdisk` Nix derivation patches the stock ramdisk at build time using standard tools (cpio, gzip, xz, fakeroot) — no need for the ARM64 `magiskboot` binary. Steps:
+
+1. Extract `libmagiskinit.so`, `libmagisk64.so`, `libmagisk32.so` from Magisk v25.2 APK
+2. Unpack stock `ramdisk.img` (gzip-compressed CPIO)
+3. Replace `init` with `libmagiskinit.so`
+4. Create `overlay.d/sbin/` with xz-compressed magisk binaries
+5. Strip dm-verity/AVB from `fstab.*` files
+6. Create `.backup/init` (original init) and `.backup/.magisk` config
+7. Repack with correct permissions via `fakeroot`
+
+The emulator loads this via `-ramdisk ${patchedRamdisk}`. On first boot, Magisk Manager APK is installed via `adb install`.
+
+## fusermount3 Cross-compilation
+
+Android has kernel FUSE but no userspace `fusermount3`. A minimal C implementation is cross-compiled with Zig (`zig cc -target aarch64-linux-musl`) that:
+
+- Opens `/dev/fuse`, calls `mount()`, and passes the fd back via the `_FUSE_COMMFD` Unix socket (the protocol rclone's FUSE library expects).
+- Pushed to `/data/local/tmp/fusermount3` on the emulator. rclone finds it via `PATH=/data/local/tmp`.
+
+## Launcher Script Design
+
+Single `writeShellScriptBin "android"` with these phases:
+
+1. **AVD creation** — idempotent, skipped if `avdPath` directory exists
+2. **config.ini** — declarative Nix `writeText`, copied on every launch
+3. **Emulator start** — subprocess 1, output prefixed `[emulator]` via `> >(sed 's/^/[emulator] /')`
+4. **Boot wait** — polls `sys.boot_completed` via `adb shell getprop`
+5. **Configure** — idempotent settings: disable Play Store updates/Protect, disable soft keyboard, enable dark mode, install Magisk APK if missing
+6. **Binary push** — conditional (`[ -x /data/local/tmp/rclone ]`), skipped on subsequent launches
+7. **WebDAV server** — subprocess 2, output prefixed `[webdav]`
+8. **Guest mount** — orchestrated entirely from host via `adb shell "su -c '...'"` (no script pushed to guest). Uses `</dev/null >/dev/null 2>&1 &` for backgrounding (not `--daemon`, which hangs the terminal). Log at `/data/local/tmp/rclone-mount.log`.
+9. **Reboot watcher** — background subshell polls every few seconds; if mount disappears and `sys.boot_completed=1`, calls `mount_shared()` to re-establish `adb reverse` + rclone mount.
+
+### Subprocess management
+
+- Three PIDs tracked in shell variables: `EMU_PID`, `WEBDAV_PID`, `WATCHER_PID`
+- `trap cleanup EXIT` + `trap 'exit 130' INT TERM` — Ctrl-C kills everything
+- Process substitution `> >(sed ...)` preserves real PID in `$!` (unlike a pipeline which gives sed's PID)
+- `log()` function prepends `\033[0m` (ANSI reset) to prevent emulator color codes from bleeding into script output
+
+### No external state
+
+No PID files or state directories. All state lives in shell variables and is cleaned up by the EXIT trap.
+
+## Key Nix Escaping Rules (in `''...''` strings)
+
+- `${expr}` — Nix interpolation (intended for `${adb}`, `${avdName}`, etc.)
+- `''${expr}` — escaped, produces literal `${expr}` in bash (used for `''${1:-}`)
+- `$VAR`, `$!`, `$(cmd)` — literal, passed through to bash
+- `'''` — produces literal `''`
+
+## Pinned Dependencies
+
+| Dependency           | Version | Purpose                                                   |
+| -------------------- | ------- | --------------------------------------------------------- |
+| Magisk APK           | v25.2   | Root access (ramdisk patching + manager app)              |
+| rclone (linux-arm64) | v1.69.1 | FUSE mount inside emulator                                |
+| fusermount3          | custom  | Minimal FUSE helper for Android (cross-compiled with Zig) |
+
+## Emulator Flags
+
+`-no-boot-anim -no-snapstorage -gpu host -no-metrics -no-location-ui -feature -Vulkan -port 5554`
+Plus `-qemu -append androidboot.serialconsole=0` (must be last — everything after `-qemu` goes to QEMU).
+
+## Module Output
+
+- `home.packages` — `pkgs.rclone` (host-side WebDAV server) + `androidScript` (the `android` command)
+- `android-sdk` — SDK packages via `android-nixpkgs`
+- `targets.darwin.defaults` — Emulator app preferences (dark theme, forward shortcuts, disable crash reports)
+
+## Gotchas / Lessons Learned
+
+- `--daemon` mode on rclone mount via `adb shell` hangs the parent terminal. Use `</dev/null >/dev/null 2>&1 &` instead.
+- `--allow-non-empty` on rclone mount masks errors when stale mounts exist. Better to error out and let the cleanup handle it.
+- Log files under `/data/local/tmp/` are owned by root (created via `su`). Reading requires `adb shell su -c 'cat ...'`.
+- `adb` commands need `-s emulator-5554` when multiple devices are connected. The `adb` variable bakes this in.
+- The emulator port is pinned to 5554 so the ADB serial (`emulator-5554`) is deterministic.
+- `rclone serve webdav` and `rclone mount` both need `--config=""` to suppress "config not found" notices.
