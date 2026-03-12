@@ -14,6 +14,7 @@
         ./vscode
         ./work.nix
         ./android.nix
+        ./npm-globals
       ];
 
       home.stateVersion = "25.05";
