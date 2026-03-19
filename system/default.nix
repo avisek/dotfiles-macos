@@ -39,7 +39,6 @@
     nodejs
     pnpm
     antigravity
-    nodePackages.vercel
     ngrok
     claude-code
 
