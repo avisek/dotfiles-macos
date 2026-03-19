@@ -1,9 +1,18 @@
+# Declarative Android emulator with Magisk root and host-shared folder.
+#
+# Provides a single `android` command that boots a rooted emulator with
+# ~/android-shared mounted at /sdcard/shared via rclone WebDAV + FUSE.
+# Magisk is baked into the ramdisk at Nix build time (no runtime patching).
+#
+# Usage:  android           — launch (creates AVD on first run)
+#         android --delete  — remove the AVD (-d shorthand)
 {
   config,
   lib,
   pkgs,
   ...
 }: let
+  # ── AVD parameters ────────────────────────────────────────────────
   avdName = "android-10";
   androidApi = "29";
   systemImageAbi = "arm64-v8a";
@@ -13,20 +22,28 @@
   lcdHeight = 1280;
   lcdDensity = 320;
 
+  # android-nixpkgs uses dashes in package names (e.g. "google-apis-playstore")
   systemImageTagPkg = builtins.replaceStrings ["_"] ["-"] systemImageTag;
   systemImagePackage = "system-images;android-${androidApi};${systemImageTag};${systemImageAbi}";
   systemImagePath = "system-images/android-${androidApi}/${systemImageTag}/${systemImageAbi}/";
-  avdPath = "${config.home.homeDirectory}/.android/avd/${avdName}.avd";
 
   homeDir = config.home.homeDirectory;
+  avdPath = "${homeDir}/.android/avd/${avdName}.avd";
 
-  # Shared folder: ~/android-shared on host <-> /sdcard/shared in emulator
+  # ── Shared folder paths ───────────────────────────────────────────
+
+  # Shared folder: ~/android-shared on host <-> /sdcard/shared in emulator.
+  # Architecture: host runs `rclone serve webdav`, guest mounts it via
+  # `rclone mount` (FUSE). `adb reverse` tunnels the connection, bypassing
+  # the emulator's slow SLiRP user-mode network stack.
   sharedFolderHost = "${homeDir}/android-shared";
-  sharedFolderGuest = "/sdcard/shared";
-  # Mount here so propagation (shared:N) exposes the FUSE mount through
-  # all sdcardfs views (/storage/emulated, /mnt/runtime/{read,write,full}/…),
-  # making it visible to apps, not just adb shell.
+  sharedFolderGuest = "/sdcard/shared"; # for display
+  # Must mount under /mnt/runtime/default/ — sdcardfs bind-propagation
+  # exposes it through all views (/storage/emulated/0, /mnt/runtime/…),
+  # making files visible to apps, not just adb shell.
   sharedFolderGuestMount = "/mnt/runtime/default/emulated/0/shared";
+
+  # ── ADB / network ─────────────────────────────────────────────────
 
   # Pin the emulator console port so its ADB serial is deterministic,
   # allowing all adb commands to target it even with other devices connected.
@@ -34,18 +51,19 @@
   adbSerial = "emulator-${emulatorPort}";
   adb = "adb -s ${adbSerial}";
 
-  # WebDAV server for shared folder. `adb reverse` tunnels guest :28080 to
-  # host :28080 via ADB's direct transport, bypassing the emulator's slow
-  # SLiRP user-mode network stack.
+  # WebDAV port for shared folder (tunneled via `adb reverse`).
   webdavPort = "28080";
 
-  # ── Pinned dependencies ─────────────────────────────────────────────
+  # ── Pinned dependencies ───────────────────────────────────────────
 
+  # Contains magiskinit (replaces init), magisk32/64 binaries, and the Manager app.
   magiskApk = pkgs.fetchurl {
     url = "https://github.com/topjohnwu/Magisk/releases/download/v25.2/Magisk-v25.2.apk";
     sha256 = "02fm4ss2aac1q8j0h5zg3pm53nh0j84cgcb9lzf059bfif8k5p0b";
   };
 
+  # Static ARM64 Linux binary — runs inside the emulator for FUSE-mounting
+  # the host shared folder via WebDAV.
   rcloneAndroid = pkgs.fetchzip {
     url = "https://downloads.rclone.org/v1.69.1/rclone-v1.69.1-linux-arm64.zip";
     sha256 = "0m5y4z5g409100yxwzi199xx7nwisbd4a9kycv09xczc8ala7p94";
@@ -167,9 +185,9 @@
     '';
   };
 
-  # Patch the stock ramdisk with Magisk at Nix build time. Replicates what
-  # magiskboot does (CPIO manipulation, fstab patching, backup structure)
-  # using standard tools so we don't need the ARM64 Linux magiskboot binary.
+  # Patch the stock ramdisk with Magisk at Nix build time using standard
+  # tools (cpio/gzip/xz/fakeroot), avoiding the ARM64-only magiskboot binary.
+  # Loaded by the emulator via `-ramdisk ${patchedRamdisk}`.
   stockRamdisk = "${config.android-sdk.finalPackage}/share/android-sdk/${systemImagePath}ramdisk.img";
 
   patchedRamdisk = pkgs.stdenv.mkDerivation {
@@ -178,25 +196,30 @@
     nativeBuildInputs = with pkgs; [cpio gzip xz unzip fakeroot gnused];
 
     buildPhase = ''
+      # Extract magisk binaries from APK (ELF binaries despite .so extension)
       unzip -oj ${magiskApk} \
         lib/arm64-v8a/libmagiskinit.so \
         lib/arm64-v8a/libmagisk64.so \
         lib/armeabi-v7a/libmagisk32.so \
         -d .
 
+      # Unpack stock ramdisk (gzip-compressed CPIO)
       gunzip -c "${stockRamdisk}" > ramdisk.cpio
 
       mkdir rootfs
       cd rootfs
       cpio -idm --quiet < ../ramdisk.cpio
 
+      # Replace init with magiskinit (boots magisk before real init)
       cp init ../init.orig
       cp ../libmagiskinit.so init
 
+      # Embed magisk binaries for magiskinit to extract at boot
       mkdir -p overlay.d/sbin
       xz --check=crc32 -c ../libmagisk32.so > overlay.d/sbin/magisk32.xz
       xz --check=crc32 -c ../libmagisk64.so > overlay.d/sbin/magisk64.xz
 
+      # Strip dm-verity and AVB — required for Magisk to modify /system
       for f in fstab.*; do
         [ -f "$f" ] || continue
         sed -i \
@@ -206,6 +229,8 @@
           "$f"
       done
 
+      # .backup structure: magiskinit needs the original init and a list
+      # of files it injected (to hide from SafetyNet / integrity checks)
       mkdir -p .backup
       cp ../init.orig .backup/init
       printf 'overlay.d\noverlay.d/sbin\noverlay.d/sbin/magisk32.xz\noverlay.d/sbin/magisk64.xz\n' > .backup/.rmlist
@@ -213,6 +238,7 @@
 
       cd ..
 
+      # Repack with root ownership and correct permissions
       fakeroot bash -c '
         cd rootfs
         chown -R 0:0 .
@@ -230,7 +256,7 @@
 
   # ── Emulator configuration ─────────────────────────────────────────
 
-  # -qemu must be last: everything after it is passed to QEMU, not the emulator.
+  # -qemu must be last — everything after it goes to QEMU, not the emulator CLI.
   emulatorFlags = lib.concatStringsSep " " [
     "-no-boot-anim"
     "-no-snapstorage"
@@ -242,6 +268,8 @@
   ];
   qemuFlags = "-qemu -append androidboot.serialconsole=0";
 
+  # AVD hardware profile — copied into the AVD directory on each launch so
+  # changes here take effect without recreating the AVD.
   avdConfig = pkgs.writeText "${avdName}-config.ini" ''
     PlayStore.enabled=yes
     abi.type=${systemImageAbi}
@@ -341,10 +369,13 @@
   '';
 
   # ── Launcher script ────────────────────────────────────────────────
+  # Boots the emulator, configures the guest, and mounts the shared folder.
+  # Ctrl-C tears down everything (FUSE mount, WebDAV server, emulator).
 
   androidScript = pkgs.writeShellScriptBin "android" ''
     set -euo pipefail
 
+    # ANSI reset prefix prevents emulator color codes from bleeding into our output
     log() { printf '\033[0m%s\n' "$*"; }
 
     case "''${1:-}" in
@@ -374,6 +405,8 @@
     cp -f ${avdConfig} ${avdPath}/config.ini
 
     # ── Subprocess management ───────────────────────────────────────
+    # PIDs tracked in variables (no PID files on disk). EXIT trap cleans up.
+    # Teardown order: watcher -> guest mount -> adb tunnel -> host webdav -> emulator
     EMU_PID=""
     WEBDAV_PID=""
     WATCHER_PID=""
@@ -392,6 +425,7 @@
     trap 'exit 130' INT TERM
 
     # ── Start emulator (subprocess 1) ───────────────────────────────
+    # Process substitution > >() keeps $! as the emulator PID (not sed's).
     log "==> Starting emulator..."
     emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} > >(sed 's/^/[emulator] /') 2>&1 &
     EMU_PID=$!
@@ -403,17 +437,20 @@
       sleep 1
     done
 
-    # ── Configure ───────────────────────────────────────────────────
+    # ── Configure (idempotent — settings persist across reboots) ────
     log "==> Configuring..."
+    # Disable Play Store auto-updates and Play Protect
     ${adb} shell am force-stop com.android.vending
     ${adb} shell cmd appops set com.android.vending RUN_IN_BACKGROUND deny
     ${adb} shell settings put global package_verifier_enable 0
     ${adb} shell settings put global upload_apk_enable 0
     ${adb} shell settings put global verifier_verify_adb_installs 0
+    # Prefer hardware keyboard, enable dark mode
     ${adb} shell settings put secure show_ime_with_hard_keyboard 0
     ${adb} shell cmd uimode night yes
     ${adb} shell settings put secure ui_night_mode 2
 
+    # Install Magisk Manager APK (first boot only — ramdisk already has magiskinit)
     if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
       ${adb} install -r ${magiskApk} 2>/dev/null \
         && log "  Magisk installed." \
@@ -434,11 +471,17 @@
     fi
 
     # ── Mount shared folder ─────────────────────────────────────────
+    # Sets up adb reverse tunnel and runs rclone mount inside the guest.
+    # Returns 0 if the FUSE mount appears within ~3s, 1 otherwise.
+    # Used by both initial mount and the reboot watcher.
     mount_shared() {
       ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
       ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
       ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
       ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
+      # PATH lets rclone find fusermount3; </dev/null detaches stdin so the
+      # background process survives after the adb shell session ends.
+      # --daemon hangs the terminal, so we background manually with &.
       ${adb} shell "su -c '
         PATH=/data/local/tmp \
         /data/local/tmp/rclone mount \":webdav:/\" ${sharedFolderGuestMount} \
@@ -451,6 +494,7 @@
           --log-file /data/local/tmp/rclone-mount.log \
           </dev/null >/dev/null 2>&1 &
       '"
+      # Poll until FUSE mount appears (15 × 0.2s = up to 3s)
       for _ in $(seq 15); do
         ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}" && return 0
         sleep 0.2
@@ -458,6 +502,7 @@
       return 1
     }
 
+    # Start host-side WebDAV server (subprocess 2) — guest connects via adb reverse
     log "==> Mounting shared folder..."
     mkdir -p "${sharedFolderHost}"
     rclone serve webdav "${sharedFolderHost}" \
@@ -483,7 +528,10 @@
     fi
     log ""
 
-    # ── Watch for guest reboots and re-mount ──────────────────────
+    # ── Reboot watcher (subprocess 3) ─────────────────────────────
+    # A guest reboot kills rclone mount and the adb reverse tunnel.
+    # This background loop detects mount loss after boot completes and
+    # re-establishes both automatically.
     (
       while kill -0 "$EMU_PID" 2>/dev/null; do
         sleep 3
@@ -499,11 +547,13 @@
     ) &
     WATCHER_PID=$!
 
+    # Block until the emulator exits (Ctrl-C triggers the EXIT trap)
     wait $EMU_PID
   '';
 in {
   home.packages = [pkgs.rclone androidScript];
 
+  # SDK packages managed by android-nixpkgs overlay
   android-sdk = {
     enable = true;
 
@@ -516,6 +566,7 @@ in {
     ];
   };
 
+  # Emulator app preferences (dark theme, forward keyboard shortcuts, no crash reports)
   targets.darwin.defaults = {
     "com.android.Emulator" = {
       "set.theme" = 1;
