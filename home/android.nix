@@ -520,7 +520,12 @@
       '"
       # Poll until FUSE mount appears (15 × 0.2s = up to 3s)
       for _ in $(seq 15); do
-        ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}" && return 0
+        if ${adb} shell mount 2>/dev/null | grep -q "${sharedFolderGuestMount}"; then
+          # Broadcast media scan so apps detect files in the shared folder
+          ${adb} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+            -d "file://${sharedFolderGuestStorage}/" > /dev/null || true
+          return 0
+        fi
         sleep 0.2
       done
       return 1
@@ -546,9 +551,6 @@
       log "  Host:  ${sharedFolderHost}"
       log "  Guest: ${sharedFolderGuest}"
       log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'"
-      log "Initiating media scan..."
-      ${adb} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-        -d "file://${sharedFolderGuestStorage}/" > /dev/null || true
     else
       log "Warning: shared folder mount failed." >&2
       log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
@@ -567,9 +569,6 @@
         log "==> Re-mounting shared folder (device rebooted)..."
         if mount_shared; then
           log "Shared folder re-mounted."
-          log "Initiating media scan..."
-          ${adb} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
-            -d "file://${sharedFolderGuestStorage}/" > /dev/null || true
         else
           log "Warning: shared folder re-mount failed." >&2
         fi
