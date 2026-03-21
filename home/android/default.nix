@@ -534,7 +534,6 @@
     ${adb} shell settings put global verifier_verify_adb_installs 0
     # Prefer hardware keyboard, enable dark mode
     ${adb} shell settings put secure show_ime_with_hard_keyboard 0
-    ${adb} shell cmd uimode night yes
     ${adb} shell settings put secure ui_night_mode 2
 
     # Disable bloat packages (filter success messages, only show errors)
