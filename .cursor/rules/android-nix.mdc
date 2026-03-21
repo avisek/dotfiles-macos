@@ -1,12 +1,12 @@
 ---
 description: Architecture and implementation context for the declarative Android emulator module
-globs: home/android.nix
+globs: home/android/**
 alwaysApply: false
 ---
 
 # android.nix — Declarative Android Emulator with Magisk Root & Shared Folders
 
-Home-manager module (`home/android.nix`) that provides a single `android` command to launch a fully configured Android emulator with Magisk root access and a FUSE-mounted shared folder between host and guest.
+Home-manager module (`home/android/default.nix`) that provides a single `android` command to launch a fully configured Android emulator with Magisk root access and a FUSE-mounted shared folder between host and guest.
 
 ## Target
 
@@ -70,7 +70,7 @@ Single `writeShellScriptBin "android"` with these phases:
 2. **config.ini** — declarative Nix `writeText`, copied on every launch
 3. **Emulator start** — subprocess 1, output prefixed `[emulator]` via `> >(sed 's/^/[emulator] /')`
 4. **Boot wait** — polls `sys.boot_completed` via `adb shell getprop`
-5. **Configure** — idempotent settings: disable Play Store updates/Protect, disable soft keyboard, enable dark mode, install Magisk APK if missing
+5. **Configure** — idempotent settings: disable Play Store updates/Protect, disable soft keyboard, enable dark mode, disable bloat packages (`disablePackages` list, single batched `su -c 'pm disable ...'` call), install Magisk APK if missing, install APKs from `apks/` (skipped via `aapt2` + `pm list packages` check, `-g` grants all permissions), push files from `downloads/` to `/sdcard/Download/`
 6. **Binary push** — conditional (`[ -x /data/local/tmp/rclone ]`), skipped on subsequent launches
 7. **WebDAV server** — subprocess 2, output prefixed `[webdav]`
 8. **Guest mount** — orchestrated entirely from host via `adb shell "su -c '...'"` (no script pushed to guest). Uses `</dev/null >/dev/null 2>&1 &` for backgrounding (not `--daemon`, which hangs the terminal). Log at `/data/local/tmp/rclone-mount.log`.
@@ -94,6 +94,21 @@ No PID files or state directories. All state lives in shell variables and is cle
 - `$VAR`, `$!`, `$(cmd)` — literal, passed through to bash
 - `'''` — produces literal `''`
 
+## Folder-Based App Management
+
+```
+home/android/
+  default.nix
+  apks/         # .apk files auto-installed on boot
+  downloads/    # files auto-pushed to /sdcard/Download/
+```
+
+- `builtins.readDir` discovers files at Nix eval time; adding/removing files triggers script rebuild.
+- Both directories are guarded by `builtins.pathExists` — absent or empty directories are fine.
+- APK install uses `aapt2 dump packagename` (`pkgs.aapt`, ~67ms) to extract the package name, checks against `pm list packages`, and skips if already installed. Installs with `adb install -r -g` (replace + grant all permissions).
+- Bloat packages are disabled via a single `adb shell "su -c 'pm disable ...; pm disable ...'"` call (all packages joined with `;`). Output is piped through `grep -v "new state: disabled"` to suppress success messages.
+- Download push checks `[ -f /sdcard/Download/<name> ]` before pushing.
+
 ## Pinned Dependencies
 
 | Dependency           | Version | Purpose                                                   |
@@ -101,6 +116,7 @@ No PID files or state directories. All state lives in shell variables and is cle
 | Magisk APK           | v25.2   | Root access (ramdisk patching + manager app)              |
 | rclone (linux-arm64) | v1.69.1 | FUSE mount inside emulator                                |
 | fusermount3          | custom  | Minimal FUSE helper for Android (cross-compiled with Zig) |
+| aapt2                | nixpkgs | APK package name extraction for install-skip logic        |
 
 ## Virtual SD Card Suppression
 

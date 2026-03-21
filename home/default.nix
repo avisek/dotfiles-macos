@@ -13,7 +13,7 @@
         ./git.nix
         ./vscode
         ./work.nix
-        ./android.nix
+        ./android
         ./screens.nix
         ./npm-globals
       ];
