@@ -84,90 +84,90 @@
     #include <sys/socket.h>
 
     int main(int argc, char *argv[]) {
-        char *mountpoint = NULL;
-        char *options = "";
-        int unmount = 0;
+      char *mountpoint = NULL;
+      char *options = "";
+      int unmount = 0;
 
-        for (int i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "-u") == 0) {
-                unmount = 1;
-            } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
-                options = argv[++i];
-            } else if (strcmp(argv[i], "--") == 0) {
-                if (i + 1 < argc) mountpoint = argv[i + 1];
-                break;
-            } else if (argv[i][0] != '-') {
-                mountpoint = argv[i];
-            }
+      for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-u") == 0) {
+          unmount = 1;
+        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+          options = argv[++i];
+        } else if (strcmp(argv[i], "--") == 0) {
+          if (i + 1 < argc) mountpoint = argv[i + 1];
+          break;
+        } else if (argv[i][0] != '-') {
+          mountpoint = argv[i];
         }
+      }
 
-        if (!mountpoint) {
-            fprintf(stderr, "fusermount3: missing mountpoint\n");
-            return 1;
+      if (!mountpoint) {
+        fprintf(stderr, "fusermount3: missing mountpoint\n");
+        return 1;
+      }
+
+      if (unmount) return umount2(mountpoint, 0) != 0;
+
+      int fd = open("/dev/fuse", O_RDWR);
+      if (fd < 0) { perror("fusermount3: /dev/fuse"); return 1; }
+
+      unsigned long flags = MS_NOSUID | MS_NODEV;
+      char fuse_opts[4096];
+      fuse_opts[0] = 0;
+      char *source = "fuse";
+      char fstype[256] = "fuse";
+
+      if (options[0]) {
+        char buf[4096];
+        strncpy(buf, options, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = 0;
+        char *sv;
+        for (char *t = strtok_r(buf, ",", &sv); t; t = strtok_r(NULL, ",", &sv)) {
+          if      (strcmp(t, "ro")     == 0) flags |= MS_RDONLY;
+          else if (strcmp(t, "nosuid") == 0) flags |= MS_NOSUID;
+          else if (strcmp(t, "nodev")  == 0) flags |= MS_NODEV;
+          else if (strcmp(t, "noexec") == 0) flags |= MS_NOEXEC;
+          else if (strncmp(t, "fsname=", 7) == 0) source = t + 7;
+          else if (strncmp(t, "subtype=", 8) == 0)
+            snprintf(fstype, sizeof(fstype), "fuse.%s", t + 8);
+          else {
+            if (fuse_opts[0]) strncat(fuse_opts, ",", sizeof(fuse_opts) - strlen(fuse_opts) - 1);
+            strncat(fuse_opts, t, sizeof(fuse_opts) - strlen(fuse_opts) - 1);
+          }
         }
+      }
 
-        if (unmount) return umount2(mountpoint, 0) != 0;
+      char data[4096];
+      snprintf(data, sizeof(data), "fd=%d,rootmode=40000,user_id=0,group_id=0%s%s",
+        fd, fuse_opts[0] ? "," : "", fuse_opts);
 
-        int fd = open("/dev/fuse", O_RDWR);
-        if (fd < 0) { perror("fusermount3: /dev/fuse"); return 1; }
+      if (mount(source, mountpoint, fstype, flags, data) != 0) {
+        perror("fusermount3: mount");
+        close(fd);
+        return 1;
+      }
 
-        unsigned long flags = MS_NOSUID | MS_NODEV;
-        char fuse_opts[4096];
-        fuse_opts[0] = 0;
-        char *source = "fuse";
-        char fstype[256] = "fuse";
+      char *cfd_env = getenv("_FUSE_COMMFD");
+      int cfd = cfd_env ? atoi(cfd_env) : 3;
+      char zero = 0;
+      struct iovec iov = {.iov_base = &zero, .iov_len = 1};
+      union { struct cmsghdr h; char b[CMSG_SPACE(sizeof(int))]; } ctrl;
+      memset(&ctrl, 0, sizeof(ctrl));
+      struct msghdr msg = {
+        .msg_iov = &iov, .msg_iovlen = 1,
+        .msg_control = ctrl.b, .msg_controllen = sizeof(ctrl.b),
+      };
+      struct cmsghdr *cm = CMSG_FIRSTHDR(&msg);
+      cm->cmsg_level = SOL_SOCKET;
+      cm->cmsg_type = SCM_RIGHTS;
+      cm->cmsg_len = CMSG_LEN(sizeof(int));
+      memcpy(CMSG_DATA(cm), &fd, sizeof(int));
 
-        if (options[0]) {
-            char buf[4096];
-            strncpy(buf, options, sizeof(buf) - 1);
-            buf[sizeof(buf) - 1] = 0;
-            char *sv;
-            for (char *t = strtok_r(buf, ",", &sv); t; t = strtok_r(NULL, ",", &sv)) {
-                if      (strcmp(t, "ro")     == 0) flags |= MS_RDONLY;
-                else if (strcmp(t, "nosuid") == 0) flags |= MS_NOSUID;
-                else if (strcmp(t, "nodev")  == 0) flags |= MS_NODEV;
-                else if (strcmp(t, "noexec") == 0) flags |= MS_NOEXEC;
-                else if (strncmp(t, "fsname=", 7) == 0) source = t + 7;
-                else if (strncmp(t, "subtype=", 8) == 0)
-                    snprintf(fstype, sizeof(fstype), "fuse.%s", t + 8);
-                else {
-                    if (fuse_opts[0]) strncat(fuse_opts, ",", sizeof(fuse_opts) - strlen(fuse_opts) - 1);
-                    strncat(fuse_opts, t, sizeof(fuse_opts) - strlen(fuse_opts) - 1);
-                }
-            }
-        }
-
-        char data[4096];
-        snprintf(data, sizeof(data), "fd=%d,rootmode=40000,user_id=0,group_id=0%s%s",
-            fd, fuse_opts[0] ? "," : "", fuse_opts);
-
-        if (mount(source, mountpoint, fstype, flags, data) != 0) {
-            perror("fusermount3: mount");
-            close(fd);
-            return 1;
-        }
-
-        char *cfd_env = getenv("_FUSE_COMMFD");
-        int cfd = cfd_env ? atoi(cfd_env) : 3;
-        char zero = 0;
-        struct iovec iov = {.iov_base = &zero, .iov_len = 1};
-        union { struct cmsghdr h; char b[CMSG_SPACE(sizeof(int))]; } ctrl;
-        memset(&ctrl, 0, sizeof(ctrl));
-        struct msghdr msg = {
-            .msg_iov = &iov, .msg_iovlen = 1,
-            .msg_control = ctrl.b, .msg_controllen = sizeof(ctrl.b),
-        };
-        struct cmsghdr *cm = CMSG_FIRSTHDR(&msg);
-        cm->cmsg_level = SOL_SOCKET;
-        cm->cmsg_type = SCM_RIGHTS;
-        cm->cmsg_len = CMSG_LEN(sizeof(int));
-        memcpy(CMSG_DATA(cm), &fd, sizeof(int));
-
-        if (sendmsg(cfd, &msg, 0) < 0) {
-            perror("fusermount3: sendmsg");
-            return 1;
-        }
-        return 0;
+      if (sendmsg(cfd, &msg, 0) < 0) {
+        perror("fusermount3: sendmsg");
+        return 1;
+      }
+      return 0;
     }
   '';
 
