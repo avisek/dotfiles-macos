@@ -10,7 +10,6 @@
     ./settings.nix
     ./power.nix
     ./audio.nix
-    ./screens.nix
     ./nightshift.nix
     ./hotkeys.nix
     ./homebrew.nix

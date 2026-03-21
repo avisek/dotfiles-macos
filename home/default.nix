@@ -14,6 +14,7 @@
         ./vscode
         ./work.nix
         ./android.nix
+        ./screens.nix
         ./npm-globals
       ];
 
