@@ -102,6 +102,44 @@ No PID files or state directories. All state lives in shell variables and is cle
 | rclone (linux-arm64) | v1.69.1 | FUSE mount inside emulator                                |
 | fusermount3          | custom  | Minimal FUSE helper for Android (cross-compiled with Zig) |
 
+## Virtual SD Card Suppression
+
+The emulator attaches a virtio-blk device (`vde`) for the SD card regardless of `hw.sdCard=no` in the AVD config. The vendor fstab (`/vendor/etc/fstab.ranchu`) contains a `voldmanaged=sdcard:auto` entry mapping this device, causing vold to claim it as a managed disk. Since the filesystem is unrecognized, vold posts an "Unsupported Virtual SD card" notification.
+
+### Why simpler approaches don't work
+
+- `hw.sdCard=no` / `sdcard.size=0` — controls the SD card _image_, not the virtio device slot
+- No `--no-sdcard` emulator flag exists
+- `/vendor` is a read-only dm logical partition (can't remount rw to edit fstab)
+- `sm set-virtual-disk false` — targets a different mechanism (StorageManagerService loop device)
+- Runtime `service call notification` to cancel — NMS persists the notification and no cancel API works on this build
+- Ramdisk `overlay.d/init.*.rc` approach — works on cold boot but not on `adb reboot`
+
+### The fix: Magisk `post-fs-data.d` script
+
+A shell script pushed to `/data/adb/post-fs-data.d/disable-sdcard.sh` runs on every boot (including `adb reboot`). It parses the vendor fstab to find the sdcard device name, resolves its backing virtio device via sysfs, and unbinds it from `virtio_blk`.
+
+**Why this timing works:** Android init triggers `post-fs-data` before `class_start core` (which starts vold). By the time vold reads the fstab, the block device no longer exists.
+
+### Useful diagnostic commands
+
+```bash
+adb shell sm list-disks                          # vold's disk list (empty = fix working)
+adb shell su -c 'cat /vendor/etc/fstab.ranchu'   # the voldmanaged=sdcard entry
+adb shell su -c 'cat /proc/partitions'            # all block devices (vda-vde)
+adb shell su -c 'readlink /sys/dev/block/MAJ:MIN' # resolve block device to virtio device
+```
+
+### Emulator block device layout (API 29, arm64-v8a)
+
+| Device | Major:Minor | Size   | Purpose                      |
+| ------ | ----------- | ------ | ---------------------------- |
+| vda    | 254,0       | ~2.3GB | super (system+vendor via dm) |
+| vdb    | 254,16      | ~66MB  | cache                        |
+| vdc    | 254,32      | ~6GB   | userdata (/data)             |
+| vdd    | 254,48      | ~1MB   | encryption key               |
+| vde    | 254,64      | ~59MB  | SD card (the culprit)        |
+
 ## Emulator Flags
 
 `-no-boot-anim -no-snapstorage -gpu host -no-metrics -no-location-ui -feature -Vulkan -port 5554`
@@ -121,3 +159,6 @@ Plus `-qemu -append androidboot.serialconsole=0` (must be last — everything af
 - `adb` commands need `-s emulator-5554` when multiple devices are connected. The `adb` variable bakes this in.
 - The emulator port is pinned to 5554 so the ADB serial (`emulator-5554`) is deterministic.
 - `rclone serve webdav` and `rclone mount` both need `--config=""` to suppress "config not found" notices.
+- `hw.sdCard=no` does NOT prevent the emulator from attaching a virtio-blk SD card device. The notification comes from vold reading the vendor fstab, not from the AVD config.
+- `/vendor` is a read-only logical dm partition from the super device — `mount -o remount,rw /vendor` fails even with Magisk root.
+- `adb shell "[ -f /data/adb/... ]"` always fails — the shell user can't read `/data/adb/`. Use `adb shell "su -c '[ -f /data/adb/... ]'"` instead.
