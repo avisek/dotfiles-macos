@@ -254,6 +254,20 @@
     installPhase = "cp patched.img $out";
   };
 
+  # Magisk post-fs-data script that unbinds the virtual SD card's virtio device
+  # before vold starts, preventing the "Unsupported Virtual SD card" notification.
+  # The emulator attaches a virtio-blk device regardless of hw.sdCard=no;
+  # unbinding it at the kernel level means vold never sees it.
+  disableSdcardScript = pkgs.writeText "disable-sdcard.sh" ''
+    #!/system/bin/sh
+    dev=$(grep 'voldmanaged=sdcard' /vendor/etc/fstab.ranchu 2>/dev/null | grep -o '/block/vd[a-z]*' | head -1)
+    dev=''${dev##*/}
+    [ -n "$dev" ] && [ -d "/sys/block/$dev" ] || exit 0
+    link=$(readlink "/sys/block/$dev/device" 2>/dev/null)
+    virtio=$(echo "$link" | grep -o 'virtio[0-9][0-9]*')
+    [ -n "$virtio" ] && echo "$virtio" > /sys/bus/virtio/drivers/virtio_blk/unbind 2>/dev/null
+  '';
+
   # ── Emulator configuration ─────────────────────────────────────────
 
   # -qemu must be last — everything after it goes to QEMU, not the emulator CLI.
@@ -449,6 +463,14 @@
     ${adb} shell settings put secure show_ime_with_hard_keyboard 0
     ${adb} shell cmd uimode night yes
     ${adb} shell settings put secure ui_night_mode 2
+
+    # Install Magisk boot script that suppresses the virtual SD card notification
+    if ! ${adb} shell "su -c '[ -f /data/adb/post-fs-data.d/disable-sdcard.sh ]'" 2>/dev/null; then
+      ${adb} shell "su -c 'mkdir -p /data/adb/post-fs-data.d'"
+      ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
+      ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
+      ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
+    fi
 
     # Install Magisk Manager APK (first boot only — ramdisk already has magiskinit)
     if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
