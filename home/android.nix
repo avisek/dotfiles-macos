@@ -42,6 +42,8 @@
   # exposes it through all views (/storage/emulated/0, /mnt/runtime/…),
   # making files visible to apps, not just adb shell.
   sharedFolderGuestMount = "/mnt/runtime/default/emulated/0/shared";
+  # /storage/ view of the mount — apps and MediaStore see this path.
+  sharedFolderGuestStorage = "/storage/emulated/0/shared";
 
   # ── ADB / network ─────────────────────────────────────────────────
 
@@ -544,6 +546,9 @@
       log "  Host:  ${sharedFolderHost}"
       log "  Guest: ${sharedFolderGuest}"
       log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'"
+      log "Initiating media scan..."
+      ${adb} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+        -d "file://${sharedFolderGuestStorage}/" > /dev/null || true
     else
       log "Warning: shared folder mount failed." >&2
       log "  Log:   ${adb} shell su -c 'cat /data/local/tmp/rclone-mount.log'" >&2
@@ -562,6 +567,9 @@
         log "==> Re-mounting shared folder (device rebooted)..."
         if mount_shared; then
           log "Shared folder re-mounted."
+          log "Initiating media scan..."
+          ${adb} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+            -d "file://${sharedFolderGuestStorage}/" > /dev/null || true
         else
           log "Warning: shared folder re-mount failed." >&2
         fi
