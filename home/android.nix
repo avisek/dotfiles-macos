@@ -466,20 +466,20 @@
     ${adb} shell cmd uimode night yes
     ${adb} shell settings put secure ui_night_mode 2
 
-    # Install Magisk boot script that suppresses the virtual SD card notification
-    if ! ${adb} shell "su -c '[ -f /data/adb/post-fs-data.d/disable-sdcard.sh ]'" 2>/dev/null; then
-      ${adb} shell "su -c 'mkdir -p /data/adb/post-fs-data.d'"
-      ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
-      ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
-      ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
-    fi
-
     # Install Magisk Manager APK (first boot only — ramdisk already has magiskinit)
     if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
       ${adb} install -r ${magiskApk} 2>/dev/null \
         && log "  Magisk installed." \
         || log "  (Magisk install failed)"
       ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
+    fi
+
+    # Install Magisk boot script that suppresses the virtual SD card notification
+    if ! ${adb} shell "su -c '[ -f /data/adb/post-fs-data.d/disable-sdcard.sh ]'" 2>/dev/null; then
+      ${adb} shell "su -c 'mkdir -p /data/adb/post-fs-data.d'"
+      ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
+      ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
+      ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
     fi
 
     # ── Push shared-folder binaries (skip if present) ───────────────
