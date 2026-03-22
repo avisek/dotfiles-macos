@@ -270,77 +270,6 @@
     [ -n "$virtio" ] && echo "$virtio" > /sys/bus/virtio/drivers/virtio_blk/unbind 2>/dev/null
   '';
 
-  # ── Bloat packages to disable ─────────────────────────────────────
-  disablePackages = [
-    "com.android.settings.intelligence"
-    "com.android.storagemanager"
-    "com.google.android.setupwizard"
-    "com.google.android.soundpicker"
-    "com.android.dialer"
-    "com.android.apps.tag"
-    "com.google.android.printservice.recommendation"
-    "com.google.android.apps.restore"
-    "com.android.calllogbackup"
-    "com.android.providers.partnerbookmarks"
-    "com.android.providers.calendar"
-    "com.google.android.inputmethod.korean"
-    "com.android.contacts"
-    "com.google.android.partnersetup"
-    "com.google.android.tts"
-    "com.google.android.apps.inputmethod.hindi"
-    "com.google.android.deskclock"
-    "com.android.providers.contacts"
-    "com.google.android.inputmethod.pinyin"
-    "com.android.providers.media"
-    "com.google.android.apps.docs"
-    "com.android.bookmarkprovider"
-    "com.google.android.youtube"
-    "com.google.android.apps.maps"
-    "com.google.android.apps.tachyon"
-    "com.google.android.ims"
-    "com.google.android.apps.messaging"
-    "com.google.android.googlequicksearchbox"
-    "com.ustwo.lwp"
-    "com.google.android.projection.gearhead"
-    "com.breel.wallpapers18"
-    "com.android.nfc"
-    "com.android.bips"
-    "com.android.companiondevicemanager"
-    "com.android.musicfx"
-    "com.android.smspush"
-    "com.android.camera2"
-    "com.android.dreams.basic"
-    "com.android.providers.downloads"
-    "com.google.android.apps.wallpaper.nexus"
-    "com.android.providers.downloads.ui"
-    "com.google.android.syncadapters.contacts"
-    "com.google.android.apps.wallpaper"
-    "com.android.providers.blockednumber"
-    "com.google.android.apps.pixelmigrate"
-    "com.google.android.onetimeinitializer"
-    "com.google.android.gm"
-    "com.google.android.music"
-    "com.android.providers.userdictionary"
-    "com.google.android.configupdater"
-    "com.google.android.apps.enterprise.dmagent"
-    "com.google.android.feedback"
-    "com.google.android.calendar"
-  ];
-
-  # ── APKs to install (drop .apk files into home/android/apks/) ───
-  apkDir = ./apks;
-  apkFiles =
-    if builtins.pathExists apkDir
-    then builtins.attrNames (lib.filterAttrs (n: _: lib.hasSuffix ".apk" n) (builtins.readDir apkDir))
-    else [];
-
-  # ── Files to push to /sdcard/Download/ (drop into home/android/downloads/)
-  downloadDir = ./downloads;
-  downloadFiles =
-    if builtins.pathExists downloadDir
-    then builtins.attrNames (lib.filterAttrs (_: v: v == "regular") (builtins.readDir downloadDir))
-    else [];
-
   # ── Emulator configuration ─────────────────────────────────────────
 
   # -qemu must be last — everything after it goes to QEMU, not the emulator CLI.
@@ -455,6 +384,77 @@
     vm.heapSize=512M
   '';
 
+  # ── Bloat packages to disable ─────────────────────────────────────
+  disablePackages = [
+    "com.android.settings.intelligence"
+    "com.android.storagemanager"
+    "com.google.android.setupwizard"
+    "com.google.android.soundpicker"
+    "com.android.dialer"
+    "com.android.apps.tag"
+    "com.google.android.printservice.recommendation"
+    "com.google.android.apps.restore"
+    "com.android.calllogbackup"
+    "com.android.providers.partnerbookmarks"
+    "com.android.providers.calendar"
+    "com.google.android.inputmethod.korean"
+    "com.android.contacts"
+    "com.google.android.partnersetup"
+    "com.google.android.tts"
+    "com.google.android.apps.inputmethod.hindi"
+    "com.google.android.deskclock"
+    "com.android.providers.contacts"
+    "com.google.android.inputmethod.pinyin"
+    "com.android.providers.media"
+    "com.google.android.apps.docs"
+    "com.android.bookmarkprovider"
+    "com.google.android.youtube"
+    "com.google.android.apps.maps"
+    "com.google.android.apps.tachyon"
+    "com.google.android.ims"
+    "com.google.android.apps.messaging"
+    "com.google.android.googlequicksearchbox"
+    "com.ustwo.lwp"
+    "com.google.android.projection.gearhead"
+    "com.breel.wallpapers18"
+    "com.android.nfc"
+    "com.android.bips"
+    "com.android.companiondevicemanager"
+    "com.android.musicfx"
+    "com.android.smspush"
+    "com.android.camera2"
+    "com.android.dreams.basic"
+    "com.google.android.apps.wallpaper.nexus"
+    "com.android.providers.downloads.ui"
+    "com.google.android.syncadapters.contacts"
+    "com.google.android.apps.wallpaper"
+    "com.android.providers.blockednumber"
+    "com.google.android.apps.pixelmigrate"
+    "com.google.android.onetimeinitializer"
+    "com.google.android.gm"
+    "com.google.android.inputmethod.latin"
+    "com.google.android.music"
+    "com.android.providers.userdictionary"
+    "com.google.android.configupdater"
+    "com.google.android.apps.enterprise.dmagent"
+    "com.google.android.feedback"
+    "com.google.android.calendar"
+  ];
+
+  # ── APKs to install ───────────────────────────────────────────────
+  apkDir = ./apks;
+  apkFiles =
+    if builtins.pathExists apkDir
+    then builtins.attrNames (lib.filterAttrs (n: _: lib.hasSuffix ".apk" n) (builtins.readDir apkDir))
+    else [];
+
+  # ── Files to push to /sdcard/Download/ ────────────────────────────
+  downloadDir = ./downloads;
+  downloadFiles =
+    if builtins.pathExists downloadDir
+    then builtins.attrNames (lib.filterAttrs (_: v: v == "regular") (builtins.readDir downloadDir))
+    else [];
+
   # ── Launcher script ────────────────────────────────────────────────
   # Boots the emulator, configures the guest, and mounts the shared folder.
   # Ctrl-C tears down everything (FUSE mount, WebDAV server, emulator).
@@ -514,7 +514,8 @@
     # ── Start emulator (subprocess 1) ───────────────────────────────
     # Process substitution > >() keeps $! as the emulator PID (not sed's).
     log "==> Starting emulator..."
-    emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} > >(sed 's/^/[emulator] /') 2>&1 &
+    emulator -avd ${avdName} ${emulatorFlags} -ramdisk ${patchedRamdisk} ${qemuFlags} \
+      > >(sed 's/^/[emulator] /') 2>&1 &
     EMU_PID=$!
 
     # ── Wait for boot ───────────────────────────────────────────────
@@ -536,10 +537,6 @@
     ${adb} shell settings put secure show_ime_with_hard_keyboard 0
     ${adb} shell settings put secure ui_night_mode 2
 
-    # Disable bloat packages (filter success messages, only show errors)
-    log "==> Disabling bloat packages..."
-    ${adb} shell "su -c '${lib.concatMapStringsSep "; " (pkg: "pm disable ${pkg}") disablePackages}'" 2>&1 | grep -v "new state: disabled" || true
-
     # Install Magisk Manager APK (first boot only — ramdisk already has magiskinit)
     if ! ${adb} shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then
       ${adb} install -r -g ${magiskApk} 2>/dev/null \
@@ -548,16 +545,13 @@
       ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
     fi
 
-    # Install Magisk boot script that suppresses the virtual SD card notification
-    if ! ${adb} shell "su -c '[ -f /data/adb/post-fs-data.d/disable-sdcard.sh ]'" 2>/dev/null; then
-      ${adb} shell "su -c 'mkdir -p /data/adb/post-fs-data.d'"
-      ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
-      ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
-      ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
-    fi
+    # Disable bloat packages (filter success messages, only show errors)
+    log "==> Disabling bloat packages..."
+    ${adb} shell "su -c '${lib.concatMapStringsSep "; " (pkg: "pm disable ${pkg}") disablePackages}'" \
+      | grep -v "new state: disabled" || true
 
+    # Install APKs from apks directory (skip if already installed, grant all permissions)
     ${lib.optionalString (apkFiles != []) ''
-      # Install APKs from apks directory (skip if already installed, grant all permissions)
       log "==> Installing apps..."
       _installed=$(${adb} shell pm list packages 2>/dev/null | tr -d '\r')
       ${lib.concatMapStringsSep "\n" (name: ''
@@ -571,8 +565,8 @@
         apkFiles}
     ''}
 
+    # Push files to Download directory (skip if already present)
     ${lib.optionalString (downloadFiles != []) ''
-      # Push files to Download directory
       log "==> Pushing files to Download..."
       ${lib.concatMapStringsSep "\n" (name: ''
           if ! ${adb} shell "[ -f /sdcard/Download/${name} ]" 2>/dev/null; then
@@ -582,6 +576,14 @@
         '')
         downloadFiles}
     ''}
+
+    # Install Magisk boot script that suppresses the virtual SD card notification
+    if ! ${adb} shell "su -c '[ -f /data/adb/post-fs-data.d/disable-sdcard.sh ]'" 2>/dev/null; then
+      ${adb} shell "su -c 'mkdir -p /data/adb/post-fs-data.d'"
+      ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
+      ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
+      ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
+    fi
 
     # ── Push shared-folder binaries (skip if present) ───────────────
     if ! ${adb} shell "[ -x /data/local/tmp/rclone ]" 2>/dev/null; then
@@ -601,7 +603,8 @@
     # Used by both initial mount and the reboot watcher.
     mount_shared() {
       ${adb} reverse tcp:${webdavPort} tcp:${webdavPort}
-      ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null; umount ${sharedFolderGuestMount} 2>/dev/null'" || true
+      ${adb} shell "su -c 'pkill -f \"rclone mount\" 2>/dev/null'" || true
+      ${adb} shell "su -c 'umount ${sharedFolderGuestMount} 2>/dev/null'" || true
       ${adb} shell "su -c 'mkdir -p ${sharedFolderGuestMount}'"
       ${adb} shell "su -c '> /data/local/tmp/rclone-mount.log'"
       # PATH lets rclone find fusermount3; </dev/null detaches stdin so the
