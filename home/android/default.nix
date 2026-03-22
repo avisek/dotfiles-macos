@@ -583,6 +583,7 @@
       ${adb} push ${disableSdcardScript} /data/local/tmp/disable-sdcard.sh
       ${adb} shell "su -c 'mv /data/local/tmp/disable-sdcard.sh /data/adb/post-fs-data.d/'"
       ${adb} shell "su -c 'chmod 755 /data/adb/post-fs-data.d/disable-sdcard.sh'"
+      ${adb} shell "su -c 'sh /data/adb/post-fs-data.d/disable-sdcard.sh'"
     fi
 
     # ── Push shared-folder binaries (skip if present) ───────────────
