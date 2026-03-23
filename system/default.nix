@@ -4,6 +4,7 @@
   ...
 }: {
   imports = [
+    ./networking.nix
     # ./ssh.nix
     ./sh.nix
     ./direnv.nix
