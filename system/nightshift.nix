@@ -1,24 +1,25 @@
-{pkgs, ...}: {
-  environment.systemPackages = [pkgs.nightlight];
-
+{pkgs, ...}: let
+  nightlight = "${pkgs.nightlight}/bin/nightlight";
+in {
   system.activationScripts.postActivation.text = ''
-    ${pkgs.nightlight}/bin/nightlight temp 30
-    ${pkgs.nightlight}/bin/nightlight schedule 11pm 7am
+    ${nightlight} temp 30
   '';
 
   launchd.user.agents = {
-    nightshift-on-5pm = {
+    nightshift-sleep = {
       serviceConfig = {
-        StartCalendarInterval = [{Hour = 17;}];
-        ProgramArguments = ["${pkgs.nightlight}/bin/nightlight" "on"];
+        StartCalendarInterval = [{Hour = 0;}];
+        ProgramArguments = [nightlight "schedule" "12am" "7am"];
       };
     };
 
-    nightshift-off-7pm = {
+    nightshift-nap = {
       serviceConfig = {
-        StartCalendarInterval = [{Hour = 19;}];
-        ProgramArguments = ["${pkgs.nightlight}/bin/nightlight" "off"];
+        StartCalendarInterval = [{Hour = 17;}];
+        ProgramArguments = [nightlight "schedule" "5pm" "7pm"];
       };
     };
   };
+
+  environment.systemPackages = [pkgs.nightlight];
 }
