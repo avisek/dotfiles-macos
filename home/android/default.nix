@@ -542,6 +542,7 @@
       ${adb} install -r -g ${magiskApk} 2>/dev/null \
         && log "  Magisk installed." \
         || log "  (Magisk install failed)"
+      # Launch Magisk to complete setup (prompts for reboot)
       ${adb} shell am start -n com.topjohnwu.magisk/.ui.MainActivity
     fi
 
