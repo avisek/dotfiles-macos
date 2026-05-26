@@ -1,3 +1,4 @@
 dependencies:
+  ccusage: ^18.0.11
   http-server: ^14.1.1
-  vercel: ^50.38.3
+  vercel: ^53.4.0
