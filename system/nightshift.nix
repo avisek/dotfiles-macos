@@ -1,8 +1,8 @@
-{pkgs, lib, ...}: let
-  nightlight = "${pkgs.nightlight}/bin/nightlight";
-
-  leadMinutes = 5;
-
+{
+  pkgs,
+  lib,
+  ...
+}: let
   shifts = {
     sleep = {
       temp = 30;
@@ -17,20 +17,33 @@
     };
   };
 
+  # Run the launchd agent before each shift's `from` time. Scheduling at the
+  # exact start is treated as already missed; macOS does not enable Night Shift.
+  leadMinutes = 5;
+
+  nightlight = "${pkgs.nightlight}/bin/nightlight";
+
   # Supported forms: "1am", "5pm", "7:30pm" (case-insensitive).
   parseTime = raw: let
     s = lib.toLower raw;
     m = builtins.match "^([0-9]{1,2})(:([0-9]{2}))?(am|pm)$" s;
   in
-    if m == null then
-      throw "nightshift: invalid time (expected e.g. 1am, 7:30pm): ${raw}"
+    if m == null
+    then throw "nightshift: invalid time (expected e.g. 1am, 7:30pm): ${raw}"
     else let
       hour12 = builtins.fromJSON (builtins.elemAt m 0);
       minuteStr = builtins.elemAt m 2;
-      minute = builtins.fromJSON (if minuteStr == null then "0" else minuteStr);
+      minute = builtins.fromJSON (
+        if minuteStr == null
+        then "0"
+        else minuteStr
+      );
       meridiem = builtins.elemAt m 3;
       hourBase = lib.mod hour12 12;
-      hour = if meridiem == "am" then hourBase else hourBase + 12;
+      hour =
+        if meridiem == "am"
+        then hourBase
+        else hourBase + 12;
     in {inherit hour minute;};
 
   timeToMinutes = t: t.hour * 60 + t.minute;
@@ -45,23 +58,31 @@
     minute = lib.mod normalized 60;
   };
 
-  mkAgent = {temp, from, to}: let
+  mkAgent = {
+    temp,
+    from,
+    to,
+  }: let
     trigger = triggerFor from;
   in {
-    serviceConfig.StartCalendarInterval = [{
-      Hour = trigger.hour;
-      Minute = trigger.minute;
-    }];
+    serviceConfig.StartCalendarInterval = [
+      {
+        Hour = trigger.hour;
+        Minute = trigger.minute;
+      }
+    ];
     script = ''
       ${nightlight} temp ${toString temp}
       ${nightlight} schedule ${from} ${to}
     '';
   };
 in {
-  launchd.user.agents = lib.mapAttrs' (name: shift: {
-    name = "nightshift-${name}";
-    value = mkAgent shift;
-  }) shifts;
+  launchd.user.agents =
+    lib.mapAttrs' (name: shift: {
+      name = "nightshift-${name}";
+      value = mkAgent shift;
+    })
+    shifts;
 
   environment.systemPackages = [pkgs.nightlight];
 }
