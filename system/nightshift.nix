@@ -17,73 +17,50 @@
     };
   };
 
-  parseInt = s:
-    let m = builtins.match "^[0-9]+$" s; in
-    if m == null
-    then throw "nightshift: expected integer, got: ${s}"
-    else lib.foldl' (n: c: n * 10 + (builtins.fromJSON c)) 0 (lib.stringToCharacters s);
+  # Supported forms: "1am", "5pm", "7:30pm" (case-insensitive).
+  parseTime = raw: let
+    s = lib.toLower raw;
+    m = builtins.match "^([0-9]{1,2})(:([0-9]{2}))?(am|pm)$" s;
+  in
+    if m == null then
+      throw "nightshift: invalid time (expected e.g. 1am, 7:30pm): ${raw}"
+    else let
+      hour12 = builtins.fromJSON (builtins.elemAt m 0);
+      minuteStr = builtins.elemAt m 2;
+      minute = builtins.fromJSON (if minuteStr == null then "0" else minuteStr);
+      meridiem = builtins.elemAt m 3;
+      hourBase = lib.mod hour12 12;
+      hour = if meridiem == "am" then hourBase else hourBase + 12;
+    in {inherit hour minute;};
 
-  parseTime = raw:
-    let
-      s = lib.toLower raw;
-      m12 = builtins.match "^([0-9]{1,2})(:([0-9]{2}))?(am|pm)$" s;
-      m24 = builtins.match "^([0-9]{1,2}):([0-9]{2})$" s;
-    in
-      if m12 != null then
-        let
-          h = parseInt (builtins.elemAt m12 0);
-          minStr = builtins.elemAt m12 2;
-          min = if minStr == null then 0 else parseInt minStr;
-          ampm = builtins.elemAt m12 3;
-          hour =
-            if h == 12 && ampm == "am" then 0
-            else if h == 12 && ampm == "pm" then 12
-            else if ampm == "pm" then h + 12
-            else h;
-        in
-          if h < 1 || h > 12 then throw "nightshift: invalid 12h hour in: ${raw}"
-          else if min < 0 || min > 59 then throw "nightshift: invalid minute in: ${raw}"
-          else { inherit hour min; }
-      else if m24 != null then
-        let
-          hour = parseInt (builtins.elemAt m24 0);
-          min = parseInt (builtins.elemAt m24 1);
-        in
-          if hour < 0 || hour > 23 then throw "nightshift: invalid 24h hour in: ${raw}"
-          else if min < 0 || min > 59 then throw "nightshift: invalid minute in: ${raw}"
-          else { inherit hour min; }
-      else
-        throw "nightshift: invalid time (expected e.g. 1am, 7:30pm, 01:00, 19:30): ${raw}";
+  timeToMinutes = t: t.hour * 60 + t.minute;
 
-  timeToMinutes = t: t.hour * 60 + t.min;
+  # Adding a full day before mod keeps the result correct when subtracting
+  # leadMinutes crosses midnight (e.g. 1am with 5min lead → 12:55am).
+  triggerFor = from: let
+    day = 24 * 60;
+    normalized = lib.mod (timeToMinutes (parseTime from) - leadMinutes + day) day;
+  in {
+    hour = normalized / 60;
+    minute = lib.mod normalized 60;
+  };
 
-  minutesToTime = total:
-    let
-      day = 24 * 60;
-      normalized = lib.mod (total + day) day;
-      hour = builtins.div normalized 60;
-      min = normalized - hour * 60;
-    in
-      { inherit hour min; };
-
-  triggerFor = from: minutesToTime (timeToMinutes (parseTime from) - leadMinutes);
-
-  mkAgent = name: shift:
-    let trigger = triggerFor shift.from;
-    in {
-      serviceConfig.StartCalendarInterval = [{
-        Hour = trigger.hour;
-        Minute = trigger.min;
-      }];
-      script = ''
-        ${nightlight} temp ${toString shift.temp}
-        ${nightlight} schedule ${shift.from} ${shift.to}
-      '';
-    };
+  mkAgent = {temp, from, to}: let
+    trigger = triggerFor from;
+  in {
+    serviceConfig.StartCalendarInterval = [{
+      Hour = trigger.hour;
+      Minute = trigger.minute;
+    }];
+    script = ''
+      ${nightlight} temp ${toString temp}
+      ${nightlight} schedule ${from} ${to}
+    '';
+  };
 in {
   launchd.user.agents = lib.mapAttrs' (name: shift: {
     name = "nightshift-${name}";
-    value = mkAgent name shift;
+    value = mkAgent shift;
   }) shifts;
 
   environment.systemPackages = [pkgs.nightlight];
