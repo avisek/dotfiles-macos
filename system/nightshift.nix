@@ -8,14 +8,14 @@ in {
   launchd.user.agents = {
     nightshift-sleep = {
       serviceConfig = {
-        StartCalendarInterval = [{Hour = 0;}];
-        ProgramArguments = [nightlight "schedule" "12am" "7am"];
+        StartCalendarInterval = [{Hour = 1 - 1;}];
+        ProgramArguments = [nightlight "schedule" "1am" "7am"];
       };
     };
 
     nightshift-nap = {
       serviceConfig = {
-        StartCalendarInterval = [{Hour = 17;}];
+        StartCalendarInterval = [{Hour = 17 - 1;}];
         ProgramArguments = [nightlight "schedule" "5pm" "7pm"];
       };
     };

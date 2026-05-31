@@ -405,7 +405,6 @@
     "com.google.android.deskclock"
     "com.android.providers.contacts"
     "com.google.android.inputmethod.pinyin"
-    "com.android.providers.media"
     "com.google.android.apps.docs"
     "com.android.bookmarkprovider"
     "com.google.android.youtube"
