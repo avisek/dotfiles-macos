@@ -38,7 +38,7 @@
 
     nodejs
     pnpm
-    antigravity
+    antigravity-ide
     ngrok
     claude-code
 

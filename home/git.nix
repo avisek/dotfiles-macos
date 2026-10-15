@@ -8,6 +8,11 @@
 
       init.defaultBranch = "main";
       push.autoSetupRemote = true;
+
+      alias = {
+        resetup = "!git fetch && git reset --hard @{u}";
+        catchup = "!f() { b=$(git symbolic-ref refs/remotes/origin/HEAD --short | sed 's|origin/||'); git fetch origin \"$b:$b\"; }; f";
+      };
     };
   };
 

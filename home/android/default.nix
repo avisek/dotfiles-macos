@@ -685,7 +685,9 @@
     wait $EMU_PID
   '';
 in {
-  home.packages = [pkgs.rclone androidScript];
+  # hiPrio: cmdline-tools also ships bin/android (deprecated SDK wrapper);
+  # prefer this launcher when home-manager merges the PATH.
+  home.packages = [pkgs.rclone (lib.hiPrio androidScript)];
 
   # SDK packages managed by android-nixpkgs overlay
   android-sdk = {

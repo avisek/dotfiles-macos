@@ -34,7 +34,7 @@
       Endel = 1346247457;
     };
 
-    caskArgs.no_quarantine = true;
+    # Homebrew 6+ removed --no-quarantine; global cask_args breaks `brew bundle`.
     onActivation.cleanup = "zap";
   };
 
