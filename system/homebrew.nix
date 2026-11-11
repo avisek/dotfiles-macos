@@ -1,4 +1,8 @@
-{
+{pkgs, ...}: {
+  environment.systemPackages = with pkgs; [
+    mas # mas search yoink
+  ];
+
   homebrew = {
     enable = true;
 
@@ -6,7 +10,6 @@
     ];
 
     brews = [
-      "mas" # mas search yoink
     ];
 
     casks = [
@@ -17,7 +20,6 @@
       # ~/Library/Application\ Support/io.ganeshrvel.openmtp
       # ~/Library/Preferences/io.ganeshrvel.openmtp.plist
 
-      "iina"
       # "the-unarchiver"
       # "obsidian"
       # "logseq"
@@ -26,7 +28,6 @@
 
       "audiorelay"
       "steam"
-      "monitorcontrol"
     ];
 
     masApps = {
@@ -34,7 +35,6 @@
       Endel = 1346247457;
     };
 
-    # Homebrew 6+ removed --no-quarantine; global cask_args breaks `brew bundle`.
     onActivation.cleanup = "zap";
   };
 

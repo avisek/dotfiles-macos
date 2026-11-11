@@ -43,10 +43,11 @@
     claude-code
 
     obsidian
-    # mas
-    # iina
     # the-unarchiver
     kitty
+
+    iina
+    monitorcontrol
   ];
 
   environment.variables = {
