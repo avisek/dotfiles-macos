@@ -12,7 +12,7 @@
 
     nap = {
       temp = 20;
-      from = "5pm";
+      from = "4:30pm";
       to = "7pm";
     };
   };
