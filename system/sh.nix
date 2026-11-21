@@ -36,11 +36,11 @@
     # Modules can append commands to _PRE_NR via environment.interactiveShellInit
     hook = "[ -n \"$_PRE_NR\" ] && sudo sh -c \"$_PRE_NR\";";
   in {
-    nrs = "${hook} sudo ${rebuild} switch --flake ~/.dotfiles --impure && exec -l $SHELL";
-    nrt = "${hook} sudo ${rebuild} ${test} --flake ~/.dotfiles --impure && exec -l $SHELL";
-    nrb = "${hook} sudo ${rebuild} boot --flake ~/.dotfiles --impure";
+    nrs = "${hook} sudo ${rebuild} switch --flake path:~/.dotfiles --impure && exec -l $SHELL";
+    nrt = "${hook} sudo ${rebuild} ${test} --flake path:~/.dotfiles --impure && exec -l $SHELL";
+    nrb = "${hook} sudo ${rebuild} boot --flake path:~/.dotfiles --impure";
     nrbr = "nrb && reboot";
-    nfu = "nix flake update --flake ~/.dotfiles --impure";
+    nfu = "nix flake update --flake path:~/.dotfiles --impure";
     ngc = "sudo nix-collect-garbage -d && nrs";
     ngcr = "ngc && reboot";
     nrl = "sudo ${rebuild} --list-generations";
