@@ -17,7 +17,8 @@
   };
 in {
   homebrew.casks = [
-    "blackhole-2ch"
+    "blackhole-16ch"
+    "rew"
   ];
 
   environment.systemPackages = with pkgs; [
